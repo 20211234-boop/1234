@@ -127,6 +127,33 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 
 ---
 
+## 부록 — Everything Claude Code (핵심만 옮김)
+
+원래는 `/plugin`으로 설치하는 플러그인이지만, 웹·클라우드 환경에서는 플러그인이 막혀 있다.
+그래서 개발 언어와 상관없는 핵심 명령어 4개와 에이전트 3개만 이 저장소에 직접 복사했다.
+기존 명령과 이름이 겹치지 않게 앞에 `ecc-`를 붙였다.
+
+| 명령어 | 하는 일 |
+|---|---|
+| `/ecc-plan 기능 설명` | 요구사항 재정리 → 위험 → 단계별 계획. **"진행"이라고 할 때까지 코드를 건드리지 않음** |
+| `/ecc-code-review` | 커밋 안 된 변경을 보안·품질 기준으로 검토. PR 번호를 주면 PR 리뷰 |
+| `/ecc-build-fix` | 빌드 에러를 하나씩 최소 수정으로 고침. 같은 에러 3번 실패하면 멈추고 물어봄 |
+| `/ecc-test-coverage` | 커버리지 80% 미만 파일을 찾아 테스트 추가 |
+
+에이전트: `planner`(읽기 전용 계획), `code-reviewer`, `build-error-resolver`.
+
+**원본에서 바꾼 점**
+- `/ecc-code-review` PR 모드: 원래는 GitHub에 리뷰를 자동 게시하고 승인까지 하는데, 요청할 때만 게시하도록 바꿨다.
+- `code-reviewer` 에이전트: "모든 코드 변경에 반드시 사용"이라는 설명을 "요청할 때 사용"으로 바꿨다(매번 자동 실행 방지).
+
+전체(스킬 314개·명령어 98개)는 내 컴퓨터의 Claude Code 터미널에서 플러그인으로 설치하면 된다.
+```
+/plugin marketplace add affaan-m/everything-claude-code
+/plugin install everything-claude-code@everything-claude-code
+```
+
+---
+
 ## 설치 위치와 출처
 
 | 스킬 | 출처 | 라이선스 |
@@ -135,5 +162,6 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 | frontend-design | github.com/anthropics/skills | Apache-2.0 |
 | task-observer | github.com/rebelytics/one-skill-to-rule-them-all | CC BY 4.0 |
 | handoff | 이 저장소에서 직접 작성 | — |
+| ecc-* 명령어, planner·code-reviewer·build-error-resolver 에이전트 | github.com/affaan-m/everything-claude-code | MIT |
 
 다른 프로젝트에서도 쓰려면 `.claude/skills/<이름>/` 폴더를 `~/.claude/skills/`로 복사한다.
