@@ -127,6 +127,56 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 
 ---
 
+## 2차 추가 — "30개 플러그인" 목록에서 고른 것
+
+### 새로 설치한 4개
+
+| 스킬 | 효과 | 쓰는 법 |
+|---|---|---|
+| `/i-have-adhd` | 답·다음 행동을 첫 줄에, 단계는 번호로, 서론·맺음말 삭제. 세션 내내 유지 | 시작할 때 `/i-have-adhd` 한 번. 끄기: "stop adhd mode" |
+| `/humanizer` | AI가 쓴 티(“단순히 X가 아니라 Y”, 과장, 굵은 글씨 남발, 맺음 한 줄)를 걷어냄 | 공지문·메일 초안 뒤에 `/humanizer 아래 글 다듬어줘` |
+| `/caveman` | 군더더기 없는 초간결 답변으로 토큰 절약. 세션 내내 유지 | 사용량 한도가 빠듯한 날 `/caveman`. 끄기: "normal mode" |
+| `/karpathy-guidelines` | 코드 작성 시 가정 먼저 밝히기·최소 코드·요청한 곳만 수정 | 코드·스크립트·엑셀 매크로 요청할 때 자동 적용 |
+
+- `i-have-adhd`와 `caveman`은 둘 다 "답 먼저" 스타일이라 **동시에 켜지 말 것.** 평소엔 adhd, 토큰 아낄 땐 caveman.
+- `humanizer`는 영어 사례 위주지만 규칙("X가 아니라 Y" 구조, 과장, 장식용 굵은 글씨)은 한국어에도 그대로 적용된다.
+- `caveman`의 `ultra`·`wenyan` 모드는 별도 스킬이라 설치하지 않았다(기본 모드만).
+
+### 이미 갖고 있는 것 (설치 불필요)
+
+| 목록 이름 | 지금 쓸 수 있는 것 |
+|---|---|
+| Superpowers, Agent Skills | 이 계정에 이미 설치됨 (`superpowers:*`, `agent-skills:*`) |
+| Graphify, Agent Reach | 이미 설치됨 |
+| Ponytail | 이미 설치됨 (`/ponytail`) |
+| Skills by Anthropic | docx·pdf·pptx·xlsx 스킬, frontend-design 이미 있음 |
+| ECC | 핵심 4개 명령 옮겨둠 (아래 부록) |
+| Headroom | 7순위 참고 (내 컴퓨터에 설치하는 프로그램) |
+| PPT Master | `pptx` 스킬로 대체 |
+| Diagram Design, Archify | 다이어그램은 기본 기능으로 가능 |
+| Marketing Skills | `marketing:*` 플러그인 이미 있음 |
+
+### 나중에 고려 (조건이 맞으면)
+
+| 이름 | 왜 보류 |
+|---|---|
+| Claude-Mem | 세션 간 기억. 내 컴퓨터 Claude Code + Node.js 필요. 코워크엔 자체 메모리 기능이 있음 |
+| Last 30 Days | Reddit·X 최근 30일 트렌드 조사. 파이썬 스크립트·API 키가 있어야 제 성능 |
+| UI UX Pro Max, Taste, Impeccable | 디자인 스킬. `frontend-design` + `aura-farming`과 역할이 겹침 |
+
+### 맞지 않아 제외
+
+| 이름 | 이유 |
+|---|---|
+| REA | 앱·바이너리 리버스 엔지니어링 — 업무와 무관 |
+| Career Ops | 구직자용 채용공고 스캐너 (채용 담당자용 아님) |
+| HyperFrames, OpenMontage | 영상 제작 파이프라인 |
+| gstack, GSD, BMAD Method, Matt Pocock Skills, Understand Anything | 개발자용 대형 프레임워크 — 컨텍스트 소모 큼 |
+
+※ 카드에 적힌 별(★) 숫자는 출처마다 크게 달라 신뢰하지 않았다.
+
+---
+
 ## 부록 — Everything Claude Code (핵심만 옮김)
 
 원래는 `/plugin`으로 설치하는 플러그인이지만, 웹·클라우드 환경에서는 플러그인이 막혀 있다.
@@ -162,6 +212,10 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 | frontend-design | github.com/anthropics/skills | Apache-2.0 |
 | task-observer | github.com/rebelytics/one-skill-to-rule-them-all | CC BY 4.0 |
 | handoff | 이 저장소에서 직접 작성 | — |
+| i-have-adhd | github.com/ayghri/i-have-adhd | MIT |
+| humanizer | github.com/blader/humanizer | MIT |
+| caveman | github.com/JuliusBrussee/caveman | Apache-2.0 |
+| karpathy-guidelines | github.com/forrestchang/andrej-karpathy-skills | MIT (README 기재) |
 | ecc-* 명령어, planner·code-reviewer·build-error-resolver 에이전트 | github.com/affaan-m/everything-claude-code | MIT |
 
 다른 프로젝트에서도 쓰려면 `.claude/skills/<이름>/` 폴더를 `~/.claude/skills/`로 복사한다.
