@@ -372,21 +372,73 @@ th { color: rgba(255,240,230,.62); }
 .sched li em { font-style: normal; color: var(--faint); font-size: 11.5px; }
 .sched li .dday { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgba(255,90,95,.4); }
 @media (max-width: 900px) { .side { margin: 0; height: auto; border-radius: 0; } .top-wrap { grid-template-columns: 1fr; } }
+
+/* ===== Motion ===== */
+.ni { width: 18px; height: 18px; flex: none; }
+.nav-i { justify-content: flex-start; gap: 10px; }
+.nav-i small { margin-left: auto; }
+.nav-i.sub { padding-left: 12px; }
+.brand { position: relative; }
+.collapse { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; border: 0; background: #fffaf6; color: #3b2620; display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 8px rgba(35,15,8,.3); }
+.collapse svg { width: 14px; height: 14px; transition: transform .35s ease; }
+.collapse:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.app { transition: grid-template-columns .45s cubic-bezier(.2,.8,.2,1); }
+.app.mini { grid-template-columns: 84px minmax(0, 1fr); }
+.app.mini .lbl, .app.mini .nav-h, .app.mini .side-foot, .app.mini .nav-i small { display: none; }
+.app.mini .nav-i { justify-content: center; padding: 10px 0; }
+.app.mini .brand { flex-direction: column; gap: 10px; padding: 0; align-items: center; }
+.app.mini .collapse { margin: 0; }
+.app.mini .collapse svg { transform: rotate(180deg); }
+.quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.qa { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 18px; text-decoration: none; color: var(--fg);
+  background: linear-gradient(160deg, rgba(255,255,255,.2), rgba(255,255,255,.08)); border: 1px solid rgba(255,255,255,.26);
+  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); box-shadow: var(--shadow); }
+.qa b { display: block; font-size: 13.5px; font-weight: 600; }
+.qa small { color: var(--faint); font-size: 12px; }
+.qa-i { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: rgba(255,255,255,.22); flex: none; }
+.qa-go { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.18); }
+.qa:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* glass shine follows pointer */
+.tile::before, .qa::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgba(255,255,255,.22), transparent 60%); transition: opacity .3s; }
+.qa { position: relative; overflow: hidden; }
+.tile:hover::before, .qa:hover::before { opacity: 1; }
+#hero::before, #sim-card::before { z-index: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  body { animation: drift 40s ease-in-out infinite alternate; background-size: 120% 120%; }
+  @keyframes drift { from { background-position: 0% 0%; } to { background-position: 100% 60%; } }
+  .intro .main { animation: focusIn 1.1s cubic-bezier(.2,.8,.2,1) both; }
+  .intro .side { animation: slideIn .8s cubic-bezier(.2,.8,.2,1) both; }
+  .intro .tile, .intro .qa, .intro .sec-h, .intro .load-box { animation: rise .7s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i, 0) * 55ms + 250ms); }
+  @keyframes focusIn { from { filter: blur(16px); transform: scale(.97); } to { filter: blur(0); transform: none; } }
+  @keyframes slideIn { from { transform: translateX(-24px); opacity: .0; } to { transform: none; opacity: 1; } }
+  @keyframes rise { from { transform: translateY(18px) scale(.98); opacity: 0; filter: blur(6px); } to { transform: none; opacity: 1; filter: blur(0); } }
+  .qa { transition: transform .25s ease, background .25s ease; }
+  .qa:hover { transform: translateY(-3px); }
+  .qa:hover .qa-go { transform: translateX(3px); }
+  .qa-go { transition: transform .25s ease; }
+  .flash { animation: flash 1s ease; }
+  @keyframes flash { 0% { filter: blur(8px); opacity: .4; transform: translateY(10px); } 100% { filter: none; opacity: 1; transform: none; } }
+  .orbit { animation: spin 24s linear infinite; transform-origin: 58px 58px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+}
+.ring { overflow: visible; margin: 14px; }
+.ring svg { overflow: visible; }
 </style>
 
 <div class="app">
   <aside class="side" aria-label="HR 대시보드 메뉴">
-    <div class="brand"><span class="brand-mark">HR</span><span>People Board</span></div>
+    <div class="brand"><span class="brand-mark">HR</span><span class="lbl">People Board</span><button type="button" class="collapse" id="collapse" aria-label="메뉴 접기" aria-expanded="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
     <nav class="nav">
       <div class="nav-h">대시보드</div>
-      <div class="nav-i"><span><span class="dot"></span>인원 현황</span></div>
-      <div class="nav-i on" aria-current="page"><span><span class="dot"></span>인건비</span></div>
-      <a class="nav-i sub" href="#actual">실적 현황</a>
-      <a class="nav-i sub" href="#plan">사업계획 대비</a>
-      <a class="nav-i sub" href="#sim">2027 예산 시뮬레이션</a>
-      <div class="nav-i"><span><span class="dot"></span>근태·연차</span><small>준비 중</small></div>
-      <div class="nav-i"><span><span class="dot"></span>입·퇴사</span><small>준비 중</small></div>
-      <div class="nav-i"><span><span class="dot"></span>채용</span><small>준비 중</small></div>
+      <div class="nav-i"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.2a3.5 3.5 0 0 1 0 6.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">인원 현황</span></div>
+      <div class="nav-i on" aria-current="page"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM7.5 8.5l2 7 2.5-6 2.5 6 2-7M7 11.5h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">인건비</span></div>
+      <a class="nav-i sub" href="#actual"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">실적 현황</span></a>
+      <a class="nav-i sub" href="#plan"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">사업계획 대비</span></a>
+      <a class="nav-i sub" href="#sim"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">2027 예산 시뮬레이션</span></a>
+      <div class="nav-i"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM16 3v4M8 3v4M4 10h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">근태·연차</span><small>준비 중</small></div>
+      <div class="nav-i"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h8M10 12h11M18 9l3 3-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">입·퇴사</span><small>준비 중</small></div>
+      <div class="nav-i"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">채용</span><small>준비 중</small></div>
     </nav>
     <div class="side-foot">HR팀 · 내부용</div>
   </aside>
@@ -419,6 +471,11 @@ th { color: rgba(255,240,230,.62); }
       </aside>
       </div>
 
+      <nav class="quick" aria-label="바로가기">
+        <a class="qa" href="#plan"><span class="qa-i"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>사업계획 대비 점검</b><small id="qa1">연말 착지 전망 보기</small></span><span class="qa-go">→</span></a>
+        <a class="qa" href="#dept"><span class="qa-i"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.2a3.5 3.5 0 0 1 0 6.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>예산 초과 부서</b><small id="qa2">부서별 집행 보기</small></span><span class="qa-go">→</span></a>
+        <a class="qa" href="#sim"><span class="qa-i"><svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>2027 예산 짜기</b><small>가정 바꿔 시뮬레이션</small></span><span class="qa-go">→</span></a>
+      </nav>
       <div class="sec-h sec-a" id="actual"><h2><span class="sec-num">01</span>실적 현황</h2><p>선택한 기간의 인건비 실적을 사업계획 예산·전년과 비교합니다.</p></div>
       <section class="bento">
         <!-- Hero -->
@@ -1370,5 +1427,75 @@ th { color: rgba(255,240,230,.62); }
       li.append(a, b, c); ul.appendChild(li);
     });
   })();
+
+  // ---------- Motion ----------
+  const app = document.querySelector(".app");
+  // staggered intro
+  if (!reduce) {
+    document.querySelectorAll(".tile, .qa, .sec-h, .load-box").forEach((el, i) => el.style.setProperty("--i", Math.min(i, 18)));
+    app.classList.add("intro");
+    setTimeout(() => app.classList.remove("intro"), 2600);
+  }
+  // sidebar collapse
+  try { if (localStorage.getItem("hr-mini") === "1") app.classList.add("mini"); } catch (e) {}
+  const cb = $("collapse");
+  const syncCb = () => { const m = app.classList.contains("mini"); cb.setAttribute("aria-expanded", String(!m)); cb.setAttribute("aria-label", m ? "메뉴 펼치기" : "메뉴 접기"); };
+  syncCb();
+  cb.addEventListener("click", () => { app.classList.toggle("mini"); syncCb(); try { localStorage.setItem("hr-mini", app.classList.contains("mini") ? "1" : "0"); } catch (e) {} });
+  // pointer shine
+  document.addEventListener("pointermove", (e) => {
+    const t = e.target.closest && e.target.closest(".tile, .qa"); if (!t) return;
+    const r = t.getBoundingClientRect(); t.style.setProperty("--mx", (e.clientX - r.left) + "px"); t.style.setProperty("--my", (e.clientY - r.top) + "px");
+  });
+  // section focus on anchor
+  document.querySelectorAll('a[href^="#"]').forEach((a) => a.addEventListener("click", (e) => {
+    const id = a.getAttribute("href").slice(1), el = document.getElementById(id); if (!el) return;
+    e.preventDefault(); el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    const sec = el.classList.contains("sec-h") ? el.nextElementSibling : el;
+    if (sec && !reduce) { sec.classList.remove("flash"); void sec.offsetWidth; sec.classList.add("flash"); }
+  }));
+  // count-up numbers
+  const COUNT_IDS = ["k-total", "k-ph", "k-ot", "kv-act", "kv-bud", "kv-gap", "pl-plan", "pl-fc", "pl-gap", "sim-total", "pc-left", "pc-month"];
+  function countUp(first) {
+    COUNT_IDS.forEach((id) => {
+      const el = $(id); if (!el) return;
+      const txt = el.textContent, m = txt.match(/[-+]?[\d,]*\.?\d+/); if (!m) return;
+      const target = +m[0].replace(/,/g, ""), dec = (m[0].split(".")[1] || "").length;
+      const from = first ? 0 : (el._v ?? target); el._v = target;
+      if (reduce || from === target) return;
+      const pre = txt.slice(0, m.index), post = txt.slice(m.index + m[0].length);
+      const fmt = d3.format((m[0].includes(",") || Math.abs(target) >= 1000 ? "," : "") + "." + dec + "f");
+      const sign = m[0][0] === "+" ? "+" : "";
+      const t0 = performance.now(), dur = first ? 1400 : 700;
+      const step = (now) => {
+        const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3), v = from + (target - from) * e;
+        el.textContent = pre + (sign && v >= 0 ? "+" : "") + fmt(v) + post;
+        if (p < 1) requestAnimationFrame(step); else el.textContent = txt;
+      };
+      requestAnimationFrame(step);
+    });
+  }
+  const _render = render;
+  function orbit() {
+    const svg = document.querySelector("#ring svg"); if (!svg) return;
+    const NS = "http://www.w3.org/2000/svg", g = document.createElementNS(NS, "g"); g.setAttribute("class", "orbit");
+    DEPT.slice(0, 6).forEach((d, i) => {
+      const ang = i / 6 * Math.PI * 2, x = 58 + Math.cos(ang) * 68, y = 58 + Math.sin(ang) * 68;
+      const c = document.createElementNS(NS, "circle"); c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 9);
+      c.style.fill = `var(${DEPT_COLORS[i % DEPT_COLORS.length]})`; c.style.stroke = "#fffaf6"; c.setAttribute("stroke-width", 2);
+      const t = document.createElementNS(NS, "text"); t.setAttribute("x", x); t.setAttribute("y", y); t.setAttribute("text-anchor", "middle"); t.setAttribute("dy", "0.35em");
+      t.setAttribute("transform", `rotate(90 ${x} ${y})`); t.style.fontSize = "8px"; t.style.fontWeight = "700"; t.style.fill = "#3b2620"; t.textContent = d.dept.slice(0, 1);
+      const ti = document.createElementNS(NS, "title"); ti.textContent = d.dept; c.appendChild(ti);
+      g.append(c, t);
+    });
+    svg.appendChild(g);
+  }
+  render = function () { _render(); orbit(); countUp(false); quick(); };
+  function quick() {
+    const over = DEPT.filter((d) => d.cost > d.budget);
+    $("qa2").textContent = over.length ? `${over.map((d) => d.dept).join(", ")} 외 확인` .replace(" 외 확인", " 계획 초과") : "모든 부서 계획 이내";
+    $("qa1").textContent = `연말 착지 ${f0(LANDING)}백만원`;
+  }
+  orbit(); quick(); countUp(true);
 })();
 </script>
