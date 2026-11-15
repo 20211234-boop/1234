@@ -140,6 +140,30 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 
 ---
 
+## 디자인 팩 (5개)
+
+| 스킬 | 하는 일 | PPT에 쓸 수 있나 |
+|---|---|---|
+| `/awesome-design` | 해외 서비스 84곳의 디자인 시스템(색·서체·간격)을 골라 적용 | **예** — 색·서체만 가져와 슬라이드에 적용 |
+| `/taste` | AI티 안 나는 웹사이트 제작 + 실제 브라우저 검사 (웹 전용, 무거움) | 아니오 (웹페이지용) |
+| `/image-to-code` | 스크린샷·시안을 웹페이지 코드로 | 아니오 |
+| `/web-design-guidelines` | 만든 웹페이지를 접근성·폼·애니메이션 규칙으로 점검 | 아니오 |
+| `/agent-browser` | 진짜 브라우저를 조작해 확인·캡처 | 해당 없음 (CLI 설치 필요) |
+
+**추천 흐름**
+- PPT·보고서: `/awesome-design Stripe 느낌으로 인사제도 개편 보고 슬라이드` → `/aura-farming`으로 AI티 검사
+- 웹페이지: `/awesome-design`(시스템 고르기) → `/taste` 또는 `/frontend-design`(제작) → `/web-design-guidelines`(점검)
+- 시안이 있을 때: `/image-to-code 이 이미지처럼 만들어줘`
+
+**알아둘 점**
+- `awesome-design`과 `image-to-code`는 원본 저장소를 바탕으로 직접 작성했다(원본은 스킬이 아니라 파일 모음/다른 버전). 남의 로고·상표는 넣지 않도록 해 두었다.
+- `web-design-guidelines`는 원래 매번 인터넷에서 규칙을 받아오지만, 규칙을 미리 저장해 두어 인터넷 없이도 동작한다.
+- `agent-browser`는 내 컴퓨터에 `npm i -g agent-browser && agent-browser install`로 프로그램을 깔아야 동작한다. 원본은 모든 웹 작업을 가로채도록 되어 있어 "설치됐거나 이름을 불렀을 때만" 쓰도록 바꿨다.
+- `taste`는 40MB(이미지 자산 포함)라 코워크용 ZIP에서는 자산 폴더를 뺐다. 제 성능은 클로드 코드에서 나온다.
+- `taste`와 `frontend-design`은 역할이 겹친다. 웹사이트 하나에 둘 중 하나만 쓴다.
+
+---
+
 ## 2차 추가 — "30개 플러그인" 목록에서 고른 것
 
 ### 새로 설치한 4개
@@ -229,6 +253,11 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 | humanizer | github.com/blader/humanizer | MIT |
 | caveman | github.com/JuliusBrussee/caveman | Apache-2.0 |
 | karpathy-guidelines | github.com/forrestchang/andrej-karpathy-skills | MIT (README 기재) |
+| awesome-design (디자인 파일 84개) | github.com/VoltAgent/awesome-design-md | MIT |
+| taste | github.com/Leonxlnx/taste-skill | MIT |
+| web-design-guidelines | github.com/vercel-labs/agent-skills, web-interface-guidelines | MIT |
+| agent-browser | github.com/vercel-labs/agent-browser | Apache-2.0 |
+| image-to-code, limit-saver | 이 저장소에서 직접 작성 | — |
 | ecc-* 명령어, planner·code-reviewer·build-error-resolver 에이전트 | github.com/affaan-m/everything-claude-code | MIT |
 
 다른 프로젝트에서도 쓰려면 `.claude/skills/<이름>/` 폴더를 `~/.claude/skills/`로 복사한다.
