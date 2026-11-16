@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infographic Kit</title>
+<style>
+/* ===== 1. 토큰: 이 블록만 바꾸면 전체 색이 바뀐다 ===== */
+:root{
+  --ink:#172033; --body:#475069; --muted:#8a90a3; --line:#c9cfdc; --paper:#ffffff; --canvas:#f4f6fa;
+  /* 레인 색 4개: 서로 다른 계열, 채도 비슷하게 */
+  --c1:#2f5d9e; --c1-soft:#e6eef9;
+  --c2:#2f6b4f; --c2-soft:#e4f1ea;
+  --c3:#a8641d; --c3-soft:#fbf0e2;
+  --c4:#5b4a9b; --c4-soft:#eeeaf8;
+  --warn:#e8e23a; --ok:#2f8f5b; --bad:#c2410c;
+  --r:10px; --gap:16px;
+  --font:"Pretendard","Noto Sans KR",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--canvas);color:var(--ink);font:15px/1.5 var(--font)}
+.sheet{max-width:1040px;margin:24px auto;padding:28px;background:var(--paper);border-radius:16px}
+h1.title{margin:0 0 20px;font-size:28px;letter-spacing:-.02em;display:flex;align-items:center;gap:12px}
+h1.title::before{content:"";width:6px;height:30px;border-radius:3px;background:var(--c2)}
+.ico{width:22px;height:22px;flex:none}
+
+/* ===== 2. 레인(가로 구역): 왼쪽 색 블록 + 오른쪽 흐름 ===== */
+.lane{display:grid;grid-template-columns:120px 1fr;gap:var(--gap);padding:14px;border:1.5px solid var(--line);border-radius:14px;margin-bottom:12px}
+.lane-label{display:grid;place-items:center;border-radius:var(--r);color:#fff;font-weight:700;font-size:18px;text-align:center;padding:8px}
+.flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+
+/* ===== 3. 노드: 아이콘 + 글자. 담는 틀은 4종을 번갈아 쓴다 ===== */
+.node{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:96px;text-align:center;font-size:13px;color:var(--body)}
+.node b{color:var(--ink);font-size:14px}
+.node small{color:var(--muted);font-size:11px}
+.frame-box   .pic{border:1.5px solid currentColor;border-radius:8px;padding:10px;background:var(--paper)}
+.frame-soft  .pic{border-radius:12px;padding:11px}
+.frame-ring  .pic{border:2px solid currentColor;border-radius:50%;padding:10px}
+.frame-plain .pic{padding:4px}
+.frame-plain .pic .ico{width:34px;height:34px}
+.pic{display:grid;place-items:center}
+
+/* ===== 4. 연결선: 점선 화살표, 위에 작은 설명 ===== */
+.arrow{position:relative;flex:1;min-width:48px;height:2px;border-top:2px dashed var(--muted);margin:0 4px}
+.arrow::after{content:"";position:absolute;right:-2px;top:-7px;border:6px solid transparent;border-left:9px solid var(--muted)}
+.arrow[data-label]::before{content:attr(data-label);position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--muted);white-space:nowrap}
+.arrow.red{border-top-color:var(--bad)} .arrow.red::after{border-left-color:var(--bad)}
+
+/* ===== 5. 그룹: 점선 테두리 + 테두리에 걸친 알약 제목 ===== */
+.group{position:relative;border:1.5px dashed var(--c4);border-radius:14px;padding:22px 14px 14px;background:var(--c4-soft)}
+.pill{position:absolute;top:-12px;left:50%;transform:translateX(-50%);padding:2px 14px;border-radius:999px;background:var(--c4);color:#fff;font-size:12px;font-weight:700;white-space:nowrap}
+
+/* ===== 6. 단계 번호 배지 ===== */
+.step{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;font-weight:700;flex:none}
+.step.o{background:#fff;color:var(--ink);border:2px solid var(--ink)}
+
+/* ===== 7. 판정(마름모) / 저장소(원통) ===== */
+.gate{width:78px;height:78px;display:grid;place-items:center}
+.gate span{width:56px;height:56px;transform:rotate(45deg);border:1.5px solid var(--bad);background:#fde9e1;display:grid;place-items:center;border-radius:6px}
+.gate em{transform:rotate(-45deg);font-style:normal;font-size:11px;color:var(--bad);font-weight:700}
+.db{position:relative;width:72px;height:56px;background:var(--c2-soft);border:1.5px solid var(--c2);border-radius:50%/14px;display:grid;place-items:center;font-size:11px;color:var(--c2);font-weight:700}
+.db::before{content:"";position:absolute;top:-1.5px;left:-1.5px;right:-1.5px;height:24px;border:1.5px solid var(--c2);border-radius:50%;background:var(--c2-soft)}
+.db span{position:relative;top:6px}
+
+/* ===== 8. 결과 꼬리표(성공/차단 등) ===== */
+.tag{padding:8px 12px;border-radius:8px;border:1.5px solid #b9b52a;background:var(--warn);font-size:12px;font-weight:700;text-align:center;line-height:1.3}
+
+/* ===== 9. 비교 열(A vs B) ===== */
+.vs{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:start}
+.vs-col{border:1.5px dashed var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.vs-head{width:100%;padding:8px;border-radius:8px;color:#fff;font-weight:800;text-align:center}
+.vs-mid{align-self:center;font-weight:800;color:var(--muted)}
+.down{width:2px;height:22px;border-left:2px dashed var(--muted);position:relative}
+.down::after{content:"";position:absolute;left:-7px;bottom:-6px;border:6px solid transparent;border-top:9px solid var(--muted)}
+.best{width:100%;border-radius:10px;padding:10px 12px;font-size:12px}
+.best b{display:block;text-align:center;margin-bottom:4px}
+
+/* ===== 10. 대시보드 카드 + 도넛 ===== */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.stat{border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:4px}
+.stat .row{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:12px}
+.stat .v{font-size:26px;font-weight:800;letter-spacing:-.02em}
+.stat .d{font-size:12px;font-weight:700}
+.donut{--p:62;width:110px;aspect-ratio:1;border-radius:50%;background:conic-gradient(var(--c1) calc(var(--p)*1%),var(--c1-soft) 0);display:grid;place-items:center}
+.donut::before{content:attr(data-v);width:72%;aspect-ratio:1;border-radius:50%;background:var(--paper);display:grid;place-items:center;font-weight:800;font-size:22px}
+
+section+section{margin-top:28px}
+.cap{font-size:12px;color:var(--muted);margin:0 0 8px}
+@media (max-width:640px){.lane{grid-template-columns:1fr}.vs{grid-template-columns:1fr}.vs-mid{justify-self:center}}
+</style>
+</head>
+<body>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></symbol>
+  <symbol id="i-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5V19A9 3 0 0 0 21 19V5" /><path d="M3 12A9 3 0 0 0 21 12" /></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" /><path d="M20 2v4" /><path d="M22 4h-4" /><circle cx="4" cy="20" r="2" /></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></symbol>
+  <symbol id="i-clipboard-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><path d="m9 14 2 2 4-4" /></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" /></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" x2="19" y1="8" y2="14" /><line x1="22" x2="16" y1="11" y2="11" /></symbol>
+  <symbol id="i-graduation-cap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /><path d="M22 10v6" /><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /></symbol>
+  <symbol id="i-shield-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></symbol>
+  <symbol id="i-triangle-exclamation-point" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" /></symbol>
+  <symbol id="i-workflow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2" /><path d="M7 11v4a2 2 0 0 0 2 2h4" /><rect width="8" height="8" x="13" y="13" rx="2" /></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /><path d="M14 2v5a1 1 0 0 0 1 1h5" /><path d="M10 9H8" /><path d="M16 13H8" /><path d="M16 17H8" /></symbol>
+  <symbol id="i-circle-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m16 9-5.5 5.5L8 12" /></symbol>
+  <symbol id="i-circle-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" /></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><path d="M16 3.128a4 4 0 0 1 0 7.744" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><circle cx="9" cy="7" r="4" /></symbol>
+  <symbol id="i-trending-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7h6v6" /><path d="m22 7-8.5 8.5-5-5L2 17" /></symbol>
+  <symbol id="i-chart-pie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z" /><path d="M21.21 15.89A10 10 0 1 1 8 2.83" /></symbol>
+</svg>
+<div class="sheet">
+  <h1 class="title">인사 업무 AI 도입 구조</h1>
+
+  <section>
+    <p class="cap">패턴 A · 레인(가로 구역) + 노드 + 점선 화살표 — 노드 틀 4종을 섞어 반복감을 줄인다</p>
+
+    <div class="lane">
+      <div class="lane-label" style="background:var(--c1)">질의</div>
+      <div class="flow">
+        <div class="node frame-plain" style="color:var(--c1)"><div class="pic"><svg class="ico"><use href="#i-user"/></svg></div><b>담당자 질문</b><small>"이번 달 연차 잔여?"</small></div>
+        <div class="arrow" data-label="질문"></div>
+        <div class="node frame-box" style="color:var(--c1)"><div class="pic"><svg class="ico"><use href="#i-sparkles"/></svg></div><b>LLM</b></div>
+        <div class="arrow" data-label="답변 생성"></div>
+        <div class="node frame-soft" style="color:var(--c1)"><div class="pic" style="background:var(--c1-soft)"><svg class="ico"><use href="#i-file-text"/></svg></div><b>답변</b><small>근거 없음</small></div>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="lane-label" style="background:var(--c2)">검색 보강<br>(RAG)</div>
+      <div class="flow">
+        <div class="node frame-ring" style="color:var(--c2)"><div class="pic"><svg class="ico"><use href="#i-search"/></svg></div><b>질문</b></div>
+        <div class="arrow" data-label="검색"></div>
+        <div class="db"><span>사내 규정</span></div>
+        <div class="arrow" data-label="관련 조항"></div>
+        <div class="node frame-box" style="color:var(--c2)"><div class="pic"><svg class="ico"><use href="#i-sparkles"/></svg></div><b>LLM</b></div>
+        <div class="arrow"></div>
+        <div class="node frame-soft" style="color:var(--c2)"><div class="pic" style="background:var(--c2-soft)"><svg class="ico"><use href="#i-circle-check"/></svg></div><b>근거 있는 답변</b><small>조항 번호 포함</small></div>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="lane-label" style="background:var(--c3)">에이전트</div>
+      <div class="flow">
+        <div class="node frame-plain" style="color:var(--c3)"><div class="pic"><svg class="ico"><use href="#i-target"/></svg></div><b>목표</b></div>
+        <div class="arrow"></div>
+        <div class="group" style="--c4:var(--c3);--c4-soft:var(--c3-soft);display:flex;gap:10px;align-items:center">
+          <span class="pill">반복</span>
+          <span class="step">1</span><div class="node frame-box" style="color:var(--c3);min-width:70px"><div class="pic"><svg class="ico"><use href="#i-clipboard-check"/></svg></div><b>계획</b></div>
+          <span class="step">2</span><div class="node frame-ring" style="color:var(--c3);min-width:70px"><div class="pic"><svg class="ico"><use href="#i-workflow"/></svg></div><b>도구 실행</b></div>
+          <span class="step">3</span><div class="node frame-soft" style="color:var(--c3);min-width:70px"><div class="pic" style="background:#fff"><svg class="ico"><use href="#i-trending-up"/></svg></div><b>결과 확인</b></div>
+        </div>
+        <div class="arrow red" data-label="고위험"></div>
+        <div class="gate"><span><em>사람<br>승인</em></span></div>
+        <div class="arrow"></div>
+        <div class="tag">완료 보고</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">패턴 B · 비교 열(A vs B) — 세로 점선 흐름 + 하단 "이럴 때" 상자</p>
+    <div class="vs">
+      <div class="vs-col">
+        <div class="vs-head" style="background:var(--c1)">수작업 검토</div>
+        <div class="node frame-ring" style="color:var(--c1)"><div class="pic"><svg class="ico"><use href="#i-users"/></svg></div><b>담당자 3명</b></div>
+        <div class="down"></div>
+        <div class="node frame-box" style="color:var(--c1)"><div class="pic"><svg class="ico"><use href="#i-clock"/></svg></div><b>건당 20분</b></div>
+        <div class="best" style="background:var(--c1-soft)"><b>이럴 때</b>· 예외 사례 판단<br>· 처음 보는 유형</div>
+      </div>
+      <div class="vs-mid">vs</div>
+      <div class="vs-col">
+        <div class="vs-head" style="background:var(--c4)">AI 1차 검토</div>
+        <div class="node frame-soft" style="color:var(--c4)"><div class="pic" style="background:var(--c4-soft)"><svg class="ico"><use href="#i-bot"/></svg></div><b>규칙 자동 점검</b></div>
+        <div class="down"></div>
+        <div class="node frame-plain" style="color:var(--c4)"><div class="pic"><svg class="ico"><use href="#i-shield-check"/></svg></div><b>의심 건만 표시</b></div>
+        <div class="best" style="background:var(--c4-soft)"><b>이럴 때</b>· 반복되는 대량 건<br>· 기준이 명확한 항목</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">패턴 C · 대시보드 카드 + 도넛</p>
+    <div class="cards">
+      <div class="stat"><div class="row">이번 달 급여 총액<svg class="ico" style="color:var(--c1)"><use href="#i-wallet"/></svg></div><div class="v">4.82억</div><div class="d" style="color:var(--ok)">▲ 2.1% 전월 대비</div></div>
+      <div class="stat"><div class="row">신규 입사<svg class="ico" style="color:var(--c2)"><use href="#i-user-plus"/></svg></div><div class="v">7명</div><div class="d" style="color:var(--muted)">채용 진행 3건</div></div>
+      <div class="stat"><div class="row">교육 이수율<svg class="ico" style="color:var(--c3)"><use href="#i-graduation-cap"/></svg></div><div class="v">86%</div><div class="d" style="color:var(--bad)">▼ 마감 D-5</div></div>
+      <div class="stat" style="place-items:center"><div class="donut" style="--p:62" data-v="62%"></div><div class="row">연차 사용률</div></div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

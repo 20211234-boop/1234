@@ -140,6 +140,23 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 
 ---
 
+## 픽토그램·도식 (infographic-kit)
+
+같은 아이콘·같은 상자가 반복되는 문제를 막는 스킬. 아이콘 2,089개(Lucide, 상업 사용 가능) + 도형 부품 10종.
+
+| 이렇게 말하면 | 결과 |
+|---|---|
+| `/infographic-kit 연차 신청 승인 흐름도 만들어줘` | 번호 흐름 + 마름모 승인 + 결과 꼬리표 |
+| `/infographic-kit 수작업 vs AI 검토 비교 그림` | 비교 열(A vs B) |
+| `/infographic-kit 인사 현황 대시보드 카드` | 통계 카드 + 도넛 |
+| `보고서에 들어갈 구조도, 아이콘 겹치지 않게` | 자동으로 이 스킬 사용 |
+
+- 예시 미리보기: `.claude/skills/infographic-kit/templates/diagram-kit-preview.png`
+- 아이콘 직접 찾기: `python .claude/skills/infographic-kit/scripts/icons.py pick 급여 근태 채용`
+- PPT·보고서에는 도식을 PNG로 캡처해 넣는다. `/awesome-design`과 함께 쓰면 색을 디자인 시스템에 맞춘다.
+
+---
+
 ## 디자인 팩 (5개)
 
 | 스킬 | 하는 일 | PPT에 쓸 수 있나 |
@@ -257,7 +274,7 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 | taste | github.com/Leonxlnx/taste-skill | MIT |
 | web-design-guidelines | github.com/vercel-labs/agent-skills, web-interface-guidelines | MIT |
 | agent-browser | github.com/vercel-labs/agent-browser | Apache-2.0 |
-| image-to-code, limit-saver | 이 저장소에서 직접 작성 | — |
+| image-to-code, limit-saver, infographic-kit | 이 저장소에서 직접 작성 (아이콘은 Lucide, ISC) | — |
 | ecc-* 명령어, planner·code-reviewer·build-error-resolver 에이전트 | github.com/affaan-m/everything-claude-code | MIT |
 
 다른 프로젝트에서도 쓰려면 `.claude/skills/<이름>/` 폴더를 `~/.claude/skills/`로 복사한다.
