@@ -7,8 +7,8 @@
 
 | 기능 | 코워크 | Claude Code (내 컴퓨터) | 클라우드 세션 (웹) |
 |---|---|---|---|
-| 스킬 27개 | ✅ ZIP 업로드 | ✅ 폴더 복사 | ✅ 이 저장소에 이미 있음 |
-| ecc 명령어 4개 | ✅ 스킬로 바꾼 ZIP | ✅ `~/.claude/commands` | ✅ |
+| 스킬 27개 | ✅ 묶음 6개로 업로드 (task-observer, china-maxing 제외) | ✅ 폴더 복사 | ✅ 이 저장소에 이미 있음 |
+| ecc 명령어 4개 | ✅ dev-kit 안에 포함 | ✅ `~/.claude/commands` | ✅ |
 | 에이전트 3개 (planner 등) | ❌ | ✅ `~/.claude/agents` | ✅ |
 | "스킬 자동 선택" 표 (CLAUDE.md) | ❌ (대신 각 스킬 설명으로 자동 선택) | ✅ | ✅ |
 | `/compact`, `/context` | ❌ (`/handoff` 후 새 대화로 대신) | ✅ | ✅ |
@@ -35,28 +35,31 @@
 
 ## 1단계. 코워크에 올리기 (프로그램 설치 없음)
 
-**`all-skills-cowork.zip` 하나만 쓴다.** 이전에 받은 묶음(cowork-skills, design-skills 등)은 옛 버전이니 버린다.
-안에 31개(스킬 27 + ecc 명령어 4)가 최신판으로 들어 있다.
+코워크는 올릴 수 있는 스킬 개수가 제한되어 있다(20개 안팎에서 막힘). 그래서 **스킬 31개를 묶음 6개로 합쳤다.**
+묶음 하나 안에서 Claude가 요청에 맞는 기능을 골라 쓴다. 쓰는 말은 똑같다 ("egm 써줘", "픽토그램 넣어줘", "/crash-out" 등).
 
-1. `all-skills-cowork.zip`을 **한 번만** 압축 해제한다. 안에서 나온 `스킬이름.zip`은 풀지 않는다.
-2. Claude 앱 → **Customize → Skills → "+" → Upload a skill**
-3. `스킬이름.zip`을 하나씩 올린다. 올리면 자동으로 켜진다.
-4. **이미 올린 스킬 중 아래 두 가지는 지우고 다시 올린다** (설명이 바뀌어 자동 실행 조건이 달라졌다).
-   - `infographic-kit` — "픽토그램 넣어줘"로 자동 실행
-   - `egm-*` 7개 — "egm 써줘"로 실행
-   나머지는 이미 있으면 건너뛴다.
-
-**우선순위별로 올리기 (다 올릴 필요 없다)**
-
-| 순서 | 스킬 | 이유 |
+| 묶음 | 들어 있는 것 | 꼭 올릴까 |
 |---|---|---|
-| 1 (필수) | handoff, limit-saver, crash-out, infographic-kit | 매일 쓰는 것 |
-| 2 (문서) | humanizer, i-have-adhd, awesome-design, aura-farming, egm-review, egm-brainstorm, egm-draft, egm-resolve | 보고서·기획서·공지 |
-| 3 (웹·코드) | frontend-design, taste, image-to-code, web-design-guidelines, karpathy-guidelines, ecc-plan, ecc-code-review | 프로그램 만들 때 |
-| 4 (가끔) | caveman, 67, larp, egm-review-loop, egm-bootstrap, egm-drift-report, ecc-build-fix, ecc-test-coverage | 필요할 때만 |
-| 5 (보류) | task-observer, china-maxing, agent-browser, astryx | 무겁거나 프로그램 설치 필요 |
+| `daily-kit.zip` | handoff, limit-saver, crash-out, humanizer, i-have-adhd, caveman | ✅ 필수 |
+| `infographic-kit.zip` | 픽토그램·도식 | ✅ 필수 |
+| `design-kit.zip` | awesome-design, aura-farming, frontend-design, taste(가벼운 판), image-to-code, web-design-guidelines | ✅ 권장 |
+| `egm-kit.zip` | egm 7개 (brainstorm, draft, review, resolve, review-loop, bootstrap, drift-report) | ✅ 권장 |
+| `dev-kit.zip` | ecc-plan, ecc-code-review, ecc-build-fix, ecc-test-coverage, karpathy-guidelines, astryx, agent-browser | 코드 작업할 때 |
+| `idea-kit.zip` | larp, 67 | 선택 |
 
-많이 올릴수록 Claude가 어떤 스킬을 고를지 헷갈릴 수 있다. 1·2번부터 올리고 필요할 때 추가한다.
+뺀 것: task-observer(무겁고 기록 폴더 필요), china-maxing(효과 미검증).
+
+### 순서
+
+1. **먼저 정리한다.** 코워크 Skills 목록에서 예전에 하나씩 올린 스킬을 지운다.
+   (crash-out, handoff, aura-farming, 67, larp, china-maxing, task-observer, frontend-design, ecc-…, egm-…, infographic-kit 등.
+   회사가 넣어 준 스킬(ecorbit-… 등)은 지우지 않는다.)
+2. `all-bundles.zip`을 **한 번만** 압축 해제한다. 안에서 나온 `○○-kit.zip`은 풀지 않는다.
+3. Claude 앱 → **Customize → Skills → "+" → Upload a skill**
+4. `○○-kit.zip`을 하나씩 올린다 (최대 6개).
+
+`all-bundles.zip`은 GitHub 저장소의 `cowork-bundles/` 폴더에도 있다.
+스킬을 고친 뒤 묶음을 다시 만들려면 저장소 맨 위에서 `python3 tools/build_cowork_bundles.py`를 실행한다.
 
 업로드 메뉴가 안 보이면 회사 관리자가 스킬 기능을 꺼 둔 것이다. 관리자에게 요청한다.
 
@@ -178,7 +181,8 @@ headroom wrap claude              # Headroom을 거쳐 Claude Code 실행
 | 증상 | 해결 |
 |---|---|
 | `/`에 스킬이 안 보임 | Claude Code 재시작. 폴더 구조가 `~/.claude/skills/스킬이름/SKILL.md`인지 확인 (한 단계 더 들어가 있으면 안 됨) |
-| 코워크 업로드 실패 | ZIP 안 맨 위에 `스킬이름/SKILL.md`가 있어야 함. 묶음 파일을 통째로 올리지 말 것 |
+| 코워크 업로드 실패 | ZIP 안 맨 위에 `○○-kit/SKILL.md`가 있어야 함. `all-bundles.zip`을 통째로 올리지 말 것 |
+| 스킬 개수 제한에 걸림 | 예전에 하나씩 올린 스킬을 지우고 묶음(kit)만 올린다 |
 | "이 환경에서는 플러그인을 사용할 수 없습니다" | 웹·클라우드 환경이라서. 내 컴퓨터 Claude Code 터미널에서 실행 |
 | 스킬이 너무 많아 느림 | 안 쓰는 스킬 폴더를 지우거나, 코워크에서 스위치를 끈다 (특히 task-observer, taste, 67) |
 
