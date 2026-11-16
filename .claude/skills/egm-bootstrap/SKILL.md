@@ -1,8 +1,7 @@
 ---
 name: egm-bootstrap
 license: Apache-2.0
-disable-model-invocation: true
-description: Bootstrap directory README.md files across a repository subtree.
+description: Bootstrap directory README.md files across a repository subtree. 사용자가 "egm 부트스트랩", "egm으로 코드 문서화"라고 할 때만 사용한다.
 ---
 
 # EGM Peanuts and Hay Bootstrap (`egm-bootstrap`)

@@ -1,12 +1,12 @@
 ---
 name: egm-resolve
 license: Apache-2.0
-disable-model-invocation: true
 description: >-
   The Elephant resolution skill. Ingests flat deficiency reports from
   concurrent Goldfish reviewers, applies automated fixes for PROPOSE FIX
   items via UI multiple-choice gates, and presents interactive
   negotiation/re-sync checkpoints.
+  사용자가 "egm 지적 반영해줘", "리뷰 반영"이라고 하거나 egm-review가 끝났을 때 사용한다.
 ---
 
 # Goldfish Review: Resolve

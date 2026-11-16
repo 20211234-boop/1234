@@ -12,7 +12,7 @@
 | 보여줄 결과물 디자인 | "Stripe 느낌으로 슬라이드 만들어줘" | `awesome-design` → `aura-farming` |
 | 숫자·법규 확인 | "이 요율 맞는지 확인해줘" | `crash-out` |
 | 공지·메일 다듬기 | "이 공지문 자연스럽게" | `humanizer` |
-| 기획서·제안서 검토 | "/egm-review 이 제안서 검토해줘" | `egm-*` (이름을 불러야 실행) |
+| 기획서·제안서 검토 | "egm 써줘" (문서 첨부) | `egm-review` / `egm-brainstorm` |
 | 웹페이지 | "랜딩 페이지 만들어줘" | `frontend-design` 또는 `taste` → `web-design-guidelines` |
 | 사내 웹앱·대시보드 | "React로 인사 대시보드 만들어줘" | `astryx` (설치 필요) |
 | 스크린샷 → 화면 | "이 이미지처럼 만들어줘" | `image-to-code` |
@@ -178,7 +178,7 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 | 5 | `/egm-review-loop` | 검토 → 수정을 지적이 없을 때까지 반복 |
 | 기타 | `/egm-bootstrap`, `/egm-drift-report` | 기존 코드에서 설계 문서 만들기, 코드가 설계와 어긋났는지 점검 |
 
-- **자동 실행 안 됨:** 원본이 "이름을 불러야만 실행"으로 되어 있다. 대신 Claude가 검토가 필요해 보이면 먼저 제안한다.
+- **"egm 써줘"로 실행된다:** 문서가 있으면 검토(`egm-review`), 아이디어만 있으면 정리(`egm-brainstorm`)부터 시작한다. 원본은 이름(`/egm-review`)을 불러야만 실행됐는데, "egm"이라고 말할 때 자동으로 쓰도록 바꿨다. "egm"이라는 말 없이 검토만 부탁하면 한도를 많이 쓰기 때문에 먼저 물어본다.
 - **비용 큼:** 리뷰마다 서브에이전트 여러 개를 띄운다. 한도가 빠듯한 날엔 피한다.
 - 구글 공식 지원 제품은 아니다 (Apache-2.0 오픈소스).
 
