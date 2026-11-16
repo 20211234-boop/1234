@@ -1,7 +1,29 @@
-# 스킬·도구 활용 가이드 (우선순위순)
+# 스킬·도구 활용 가이드
 
 이 저장소의 `.claude/skills/`에 설치된 스킬과, 설치가 필요한 외부 도구를 정리했다.
-스킬은 `/이름`으로 실행하거나, 설명에 맞는 요청을 하면 Claude가 알아서 불러온다.
+**외울 필요 없다.** 아래 "이렇게 말하면" 칸처럼 평소 말로 요청하면 Claude가 알아서 맞는 스킬을 불러온다
+(클로드 코드는 `CLAUDE.md`의 "스킬 자동 선택" 표, 코워크는 각 스킬 설명이 이 역할을 한다).
+
+## 한눈에 보기 — 상황별
+
+| 상황 | 이렇게 말하면 | 자동으로 쓰이는 스킬 |
+|---|---|---|
+| 보고서·PPT에 그림 | "픽토그램 넣어줘", "흐름도로 그려줘" | `infographic-kit` |
+| 보여줄 결과물 디자인 | "Stripe 느낌으로 슬라이드 만들어줘" | `awesome-design` → `aura-farming` |
+| 숫자·법규 확인 | "이 요율 맞는지 확인해줘" | `crash-out` |
+| 공지·메일 다듬기 | "이 공지문 자연스럽게" | `humanizer` |
+| 기획서·제안서 검토 | "/egm-review 이 제안서 검토해줘" | `egm-*` (이름을 불러야 실행) |
+| 웹페이지 | "랜딩 페이지 만들어줘" | `frontend-design` 또는 `taste` → `web-design-guidelines` |
+| 사내 웹앱·대시보드 | "React로 인사 대시보드 만들어줘" | `astryx` (설치 필요) |
+| 스크린샷 → 화면 | "이 이미지처럼 만들어줘" | `image-to-code` |
+| 한도 빠듯 | "토큰 아껴줘" | `limit-saver` |
+| 대화가 길어짐 | "정리해서 넘겨줘" | `handoff` |
+
+**매일 쓰는 3개만 기억:** `/handoff`(길어지면), `/crash-out`(숫자 확인), `/infographic-kit`(그림 넣을 때).
+
+---
+
+## 처음 정리한 우선순위
 
 | 순위 | 이름 | 한 줄 요약 | 언제 | 비용 |
 |---|---|---|---|---|
@@ -140,6 +162,39 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 
 ---
 
+## 3차 추가 — 구글 EGM, 메타 Astryx, agent-browser
+
+### 구글 "코끼리·금붕어 모델" (EGM, 스킬 7개)
+
+맥락을 다 아는 "코끼리"(지금 대화)가 문서를 쓰고, 이전 대화를 모르는 "금붕어"(새 서브에이전트들)가 백지 상태에서 허점을 찾는다.
+코드뿐 아니라 **기획서·제안서·규정 개정안 검토**에도 쓸 수 있다.
+
+| 순서 | 스킬 | 하는 일 |
+|---|---|---|
+| 1 | `/egm-brainstorm` | 아이디어·요구사항을 질문으로 정리 |
+| 2 | `/egm-draft` | 설계 문서(기획서)를 섹션별로 작성 |
+| 3 | `/egm-review` | 금붕어 리뷰어 5단계 검토 (큰 그림 → 이해도 → 비평 → 다시 큰 그림 → 실행 준비) |
+| 4 | `/egm-resolve` | 리뷰 지적 사항을 하나씩 반영 |
+| 5 | `/egm-review-loop` | 검토 → 수정을 지적이 없을 때까지 반복 |
+| 기타 | `/egm-bootstrap`, `/egm-drift-report` | 기존 코드에서 설계 문서 만들기, 코드가 설계와 어긋났는지 점검 |
+
+- **자동 실행 안 됨:** 원본이 "이름을 불러야만 실행"으로 되어 있다. 대신 Claude가 검토가 필요해 보이면 먼저 제안한다.
+- **비용 큼:** 리뷰마다 서브에이전트 여러 개를 띄운다. 한도가 빠듯한 날엔 피한다.
+- 구글 공식 지원 제품은 아니다 (Apache-2.0 오픈소스).
+
+### 메타 Astryx (`/astryx`)
+
+메타가 8년간 사내에서 쓴 React 디자인 시스템(컴포넌트 150개+, 테마, 다크모드). 사내 웹앱·관리자 대시보드 만들 때 쓴다.
+- **설치 필요:** 내 컴퓨터에서 `npm i -g @astryxdesign/cli`. 프로젝트 안에서 `astryx init`.
+- 원본은 "모든 UI 작업"에 끼어들도록 되어 있어, "이름을 부르거나 React 웹앱을 만들 때만" 쓰도록 바꿨다.
+- 아직 베타. 보고서·PPT용이 아니라 웹 프로그램용이다.
+
+### agent-browser
+
+이미 설치되어 있다 (디자인 팩). 쓰려면 `npm i -g agent-browser && agent-browser install`.
+
+---
+
 ## 픽토그램·도식 (infographic-kit)
 
 같은 아이콘·같은 상자가 반복되는 문제를 막는 스킬. 아이콘 2,089개(Lucide, 상업 사용 가능) + 도형 부품 10종.
@@ -274,6 +329,8 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 | taste | github.com/Leonxlnx/taste-skill | MIT |
 | web-design-guidelines | github.com/vercel-labs/agent-skills, web-interface-guidelines | MIT |
 | agent-browser | github.com/vercel-labs/agent-browser | Apache-2.0 |
+| egm-* (7개) | github.com/google/elephant-goldfish-model | Apache-2.0 |
+| astryx | github.com/meta/astryx | MIT |
 | image-to-code, limit-saver, infographic-kit | 이 저장소에서 직접 작성 (아이콘은 Lucide, ISC) | — |
 | ecc-* 명령어, planner·code-reviewer·build-error-resolver 에이전트 | github.com/affaan-m/everything-claude-code | MIT |
 
