@@ -1,0 +1,337 @@
+# 스킬·도구 활용 가이드
+
+이 저장소의 `.claude/skills/`에 설치된 스킬과, 설치가 필요한 외부 도구를 정리했다.
+**외울 필요 없다.** 아래 "이렇게 말하면" 칸처럼 평소 말로 요청하면 Claude가 알아서 맞는 스킬을 불러온다
+(클로드 코드는 `CLAUDE.md`의 "스킬 자동 선택" 표, 코워크는 각 스킬 설명이 이 역할을 한다).
+
+## 한눈에 보기 — 상황별
+
+| 상황 | 이렇게 말하면 | 자동으로 쓰이는 스킬 |
+|---|---|---|
+| 보고서·PPT에 그림 | "픽토그램 넣어줘", "흐름도로 그려줘" | `infographic-kit` |
+| 보여줄 결과물 디자인 | "Stripe 느낌으로 슬라이드 만들어줘" | `awesome-design` → `aura-farming` |
+| 숫자·법규 확인 | "이 요율 맞는지 확인해줘" | `crash-out` |
+| 공지·메일 다듬기 | "이 공지문 자연스럽게" | `humanizer` |
+| 기획서·제안서 검토 | "egm 써줘" (문서 첨부) | `egm-review` / `egm-brainstorm` |
+| 웹페이지 | "랜딩 페이지 만들어줘" | `frontend-design` 또는 `taste` → `web-design-guidelines` |
+| 사내 웹앱·대시보드 | "React로 인사 대시보드 만들어줘" | `astryx` (설치 필요) |
+| 스크린샷 → 화면 | "이 이미지처럼 만들어줘" | `image-to-code` |
+| 한도 빠듯 | "토큰 아껴줘" | `limit-saver` |
+| 대화가 길어짐 | "정리해서 넘겨줘" | `handoff` |
+
+**매일 쓰는 3개만 기억:** `/handoff`(길어지면), `/crash-out`(숫자 확인), `/infographic-kit`(그림 넣을 때).
+
+---
+
+## 처음 정리한 우선순위
+
+| 순위 | 이름 | 한 줄 요약 | 언제 | 비용 |
+|---|---|---|---|---|
+| 1 | `/context` `/compact` `/handoff` | 컨텍스트 관리 | 매 작업, 길어질 때 | 낮음 |
+| 2 | `/crash-out` | 답을 스스로 반박해 거짓말 제거 | 사실 확인·디버깅·조사 | 중간 |
+| 3 | `/frontend-design` | Anthropic 공식 디자인 스킬 | 화면·페이지 만들 때 | 낮음 |
+| 4 | `/aura-farming` | AI티 금지 목록 + 출시 전 자가 검사 | 광고·슬라이드·포스터 | 낮음 |
+| 5 | `/67` | 6개 에이전트 경쟁 + 심판 1개 | 중요한 결과물 한 방 | **높음** |
+| 6 | `/larp` | 창업 아이디어 혹독한 검증 | 사업·앱 아이디어 | 중간 |
+| 7 | Headroom (외부 도구) | 토큰 60~95% 압축 프록시 | 사용량 한도가 자주 찰 때 | 설치 필요 |
+| 8 | `/china-maxing` | 서브에이전트 지시를 중국어로 압축 | 에이전트를 많이 돌릴 때 | 절감 효과 미검증 |
+| 9 | `/task-observer` | 작업을 관찰해 스킬 개선점 기록 | 스킬을 계속 다듬고 싶을 때 | 무거움 |
+
+---
+
+## 1순위 — 컨텍스트 관리 (`/context`, `/compact`, `/handoff`)
+
+Claude가 "멍청해지는" 가장 흔한 원인은 컨텍스트가 꽉 찬 것이다. 모든 작업의 기본기.
+
+```
+/context                                  # 사용량 확인 (막대가 60~70% 넘으면 정리)
+/compact                                  # CLAUDE.md의 지침대로 결정사항·수정 파일만 남김
+/compact 인증 관련 결정만 남겨              # 이번만 다른 기준으로 압축
+/handoff                                  # HANDOFF.md로 정리 → /clear → "HANDOFF.md 읽고 이어서 해줘"
+```
+
+- 같은 작업 계속 → `/compact`
+- 주제가 바뀌거나 너무 꼬였을 때 → `/handoff` 후 `/clear`
+
+## 2순위 — `/crash-out` (거짓말 방지)
+
+초안을 숨긴 채, 주장 하나하나를 코드 실행·문서 확인·반증 검색으로 공격한다.
+결과는 `검증됨 / 불확실(표시) / 틀림(삭제)`으로 나뉘고, 마지막에 "틀린 주장 목록"이 붙는다.
+
+```
+/crash-out 이 에러 원인이 정말 캐시 때문이야?
+/crash-out 2026년 최저임금 기준으로 이 계산 맞는지 확인해줘
+```
+
+틀리면 비싼 질문(숫자, 법규, API 동작, 버그 원인)에 쓴다. 잡담에는 과하다.
+
+## 3순위 — `/frontend-design` (공식 디자인 스킬)
+
+Anthropic 공식 스킬. 주제에 맞는 디자인 방향을 먼저 정하고(색 4~6개, 서체, 레이아웃),
+"흔한 AI 디자인"(크림색 배경+테라코타, 똑같은 둥근 카드 반복 등)인지 검토한 뒤 코드를 짠다.
+
+```
+/frontend-design 원두 판매 랜딩 페이지 만들어줘. 대상은 30대 홈카페족
+```
+
+브리프(대상·목적·분위기)를 구체적으로 줄수록 결과가 좋다.
+
+## 4순위 — `/aura-farming` (AI티 검사)
+
+영상의 "스스로 검사해요" 장면이 이것. 금지 목록(보라 그라데이션, 이모지 불릿, 가운데 정렬 남발,
+똑같은 카드 반복, "혁신적인" 같은 상투어 등)을 적용하고, 내보내기 전에 자가 검사를 한다.
+결과물 + 3줄 검사 메모(선택한 방향 / 걷어낸 것 / 핵심 포인트)가 나온다.
+
+```
+/aura-farming 인스타 광고 이미지용 HTML 만들어줘 — 에티오피아 예가체프 4,800원
+```
+
+**3순위와 같이 쓰기:** `/frontend-design`으로 만들고 → `/aura-farming`으로 검사.
+
+## 5순위 — `/67` (6+1 에이전트)
+
+같은 과제를 6가지 전략(최소주의·최대주의·원리부터·선례 참고·실패 대비·파격)으로 동시에 풀고,
+7번째 심판이 점수를 매긴 뒤 좋은 부분만 합친다.
+
+```
+/67 신규 서비스 가격 정책 페이지 카피 써줘
+```
+
+**주의:** 에이전트 7개 분량의 토큰을 쓴다. 한 줄짜리 작업에는 절대 쓰지 말 것.
+
+## 6순위 — `/larp` (창업 아이디어 검증)
+
+"포지타노에서 사진 올리는 24살 창업자" 말투로 시작하지만, 실제로는 시장 규모 계산·해자·가격·
+첫 고객 100명 채널·가장 치명적인 리스크까지 진지하게 뜯어본다. 마지막에 판정 도장
+(`LARP` / `FUNDABLE LARP` / `ACTUAL COMPANY`).
+
+```
+/larp 중소기업 인사담당자용 연말정산 자동 검토 SaaS
+```
+
+## 7순위 — Headroom (외부 도구, 직접 설치)
+
+스킬이 아니라 **내 컴퓨터에 설치하는 오픈소스 프로그램**. 도구 출력·로그·파일 내용을
+Claude에 보내기 전에 압축해서 토큰을 줄인다(제작자 주장 60~95%, 독립 검증 아님).
+이 클라우드 세션에는 적용할 수 없어서 설치하지 않았다.
+
+```bash
+pip install "headroom-ai[code]"   # [code]를 빼면 코드 압축이 꺼져서 Claude Code에선 효과가 거의 없음
+headroom wrap claude              # Claude Code를 Headroom 경유로 실행
+# 또는 MCP로: headroom mcp install
+```
+
+출처: https://github.com/chopratejas/headroom
+
+## 8순위 — `/china-maxing` (서브에이전트 토큰 절감)
+
+서브에이전트에게 보내는 지시문만 중국어로 번역해서 보내고, 결과와 사용자 화면은 원래 언어를 유지한다.
+제작자는 30~50% 절감을 주장하지만 **검증된 수치가 아니다.** 번역 과정에서 뜻이 흐려질 위험도 있다.
+`/67`처럼 에이전트를 여러 개 띄우는 세션 시작 시에만 켜볼 만하다.
+
+```
+/china-maxing
+/67 ...
+```
+
+## 9순위 — `/task-observer` (스킬 자동 개선)
+
+작업 중 반복되는 실수·수정 요청을 관찰 로그로 남기고, 주간 리뷰에서 스킬 개선안을 만든다.
+756줄짜리 큰 스킬이라 **켜는 순간 컨텍스트를 많이 먹는다** — 1순위(컨텍스트 아끼기)와 충돌한다.
+그래서 설치만 하고 매 세션 자동 실행(CLAUDE.md 트리거)은 걸지 않았다.
+
+```
+/task-observer          # 스킬을 다듬는 세션에서만 수동 실행
+```
+
+**주의:** 로그를 `~/.claude/skill-observations/`에 쓰는데, 클라우드 세션은 끝나면 지워진다.
+제대로 쓰려면 내 컴퓨터의 Claude Code에서 사용할 것.
+
+---
+
+## 한도(사용량)가 빠듯할 때
+
+| 상황 | 이렇게 |
+|---|---|
+| 한도가 얼마 안 남았다 | `/limit-saver` — 답 짧게 + 파일·검색·에이전트 사용 최소화. 끄기: "절약 모드 꺼" |
+| 더 극단적으로 줄여야 한다 | `/caveman` (limit-saver와 동시에 켜지 말 것) |
+| 대화가 길어졌다 | `/handoff` → 새 대화 → "HANDOFF.md 읽고 이어서 해줘" |
+| 한도를 많이 먹는 것 | `/67`(7배), `/task-observer`, 긴 파일 통째로 붙여넣기 — 빠듯할 땐 피하기 |
+
+외부 우회 도구(OmniRoute 같은 다른 AI로 돌리는 중계기)는 개인정보가 다른 회사로 넘어갈 수 있어 업무용으로 쓰지 않는다.
+
+---
+
+## 3차 추가 — 구글 EGM, 메타 Astryx, agent-browser
+
+### 구글 "코끼리·금붕어 모델" (EGM, 스킬 7개)
+
+맥락을 다 아는 "코끼리"(지금 대화)가 문서를 쓰고, 이전 대화를 모르는 "금붕어"(새 서브에이전트들)가 백지 상태에서 허점을 찾는다.
+코드뿐 아니라 **기획서·제안서·규정 개정안 검토**에도 쓸 수 있다.
+
+| 순서 | 스킬 | 하는 일 |
+|---|---|---|
+| 1 | `/egm-brainstorm` | 아이디어·요구사항을 질문으로 정리 |
+| 2 | `/egm-draft` | 설계 문서(기획서)를 섹션별로 작성 |
+| 3 | `/egm-review` | 금붕어 리뷰어 5단계 검토 (큰 그림 → 이해도 → 비평 → 다시 큰 그림 → 실행 준비) |
+| 4 | `/egm-resolve` | 리뷰 지적 사항을 하나씩 반영 |
+| 5 | `/egm-review-loop` | 검토 → 수정을 지적이 없을 때까지 반복 |
+| 기타 | `/egm-bootstrap`, `/egm-drift-report` | 기존 코드에서 설계 문서 만들기, 코드가 설계와 어긋났는지 점검 |
+
+- **"egm 써줘"로 실행된다:** 문서가 있으면 검토(`egm-review`), 아이디어만 있으면 정리(`egm-brainstorm`)부터 시작한다. 원본은 이름(`/egm-review`)을 불러야만 실행됐는데, "egm"이라고 말할 때 자동으로 쓰도록 바꿨다. "egm"이라는 말 없이 검토만 부탁하면 한도를 많이 쓰기 때문에 먼저 물어본다.
+- **비용 큼:** 리뷰마다 서브에이전트 여러 개를 띄운다. 한도가 빠듯한 날엔 피한다.
+- 구글 공식 지원 제품은 아니다 (Apache-2.0 오픈소스).
+
+### 메타 Astryx (`/astryx`)
+
+메타가 8년간 사내에서 쓴 React 디자인 시스템(컴포넌트 150개+, 테마, 다크모드). 사내 웹앱·관리자 대시보드 만들 때 쓴다.
+- **설치 필요:** 내 컴퓨터에서 `npm i -g @astryxdesign/cli`. 프로젝트 안에서 `astryx init`.
+- 원본은 "모든 UI 작업"에 끼어들도록 되어 있어, "이름을 부르거나 React 웹앱을 만들 때만" 쓰도록 바꿨다.
+- 아직 베타. 보고서·PPT용이 아니라 웹 프로그램용이다.
+
+### agent-browser
+
+이미 설치되어 있다 (디자인 팩). 쓰려면 `npm i -g agent-browser && agent-browser install`.
+
+---
+
+## 픽토그램·도식 (infographic-kit)
+
+같은 아이콘·같은 상자가 반복되는 문제를 막는 스킬. 아이콘 2,089개(Lucide, 상업 사용 가능) + 도형 부품 10종.
+
+| 이렇게 말하면 | 결과 |
+|---|---|
+| `/infographic-kit 연차 신청 승인 흐름도 만들어줘` | 번호 흐름 + 마름모 승인 + 결과 꼬리표 |
+| `/infographic-kit 수작업 vs AI 검토 비교 그림` | 비교 열(A vs B) |
+| `/infographic-kit 인사 현황 대시보드 카드` | 통계 카드 + 도넛 |
+| `보고서에 들어갈 구조도, 아이콘 겹치지 않게` | 자동으로 이 스킬 사용 |
+
+- 예시 미리보기: `.claude/skills/infographic-kit/templates/diagram-kit-preview.png`
+- 아이콘 직접 찾기: `python .claude/skills/infographic-kit/scripts/icons.py pick 급여 근태 채용`
+- PPT·보고서에는 도식을 PNG로 캡처해 넣는다. `/awesome-design`과 함께 쓰면 색을 디자인 시스템에 맞춘다.
+
+---
+
+## 디자인 팩 (5개)
+
+| 스킬 | 하는 일 | PPT에 쓸 수 있나 |
+|---|---|---|
+| `/awesome-design` | 해외 서비스 84곳의 디자인 시스템(색·서체·간격)을 골라 적용 | **예** — 색·서체만 가져와 슬라이드에 적용 |
+| `/taste` | AI티 안 나는 웹사이트 제작 + 실제 브라우저 검사 (웹 전용, 무거움) | 아니오 (웹페이지용) |
+| `/image-to-code` | 스크린샷·시안을 웹페이지 코드로 | 아니오 |
+| `/web-design-guidelines` | 만든 웹페이지를 접근성·폼·애니메이션 규칙으로 점검 | 아니오 |
+| `/agent-browser` | 진짜 브라우저를 조작해 확인·캡처 | 해당 없음 (CLI 설치 필요) |
+
+**추천 흐름**
+- PPT·보고서: `/awesome-design Stripe 느낌으로 인사제도 개편 보고 슬라이드` → `/aura-farming`으로 AI티 검사
+- 웹페이지: `/awesome-design`(시스템 고르기) → `/taste` 또는 `/frontend-design`(제작) → `/web-design-guidelines`(점검)
+- 시안이 있을 때: `/image-to-code 이 이미지처럼 만들어줘`
+
+**알아둘 점**
+- `awesome-design`과 `image-to-code`는 원본 저장소를 바탕으로 직접 작성했다(원본은 스킬이 아니라 파일 모음/다른 버전). 남의 로고·상표는 넣지 않도록 해 두었다.
+- `web-design-guidelines`는 원래 매번 인터넷에서 규칙을 받아오지만, 규칙을 미리 저장해 두어 인터넷 없이도 동작한다.
+- `agent-browser`는 내 컴퓨터에 `npm i -g agent-browser && agent-browser install`로 프로그램을 깔아야 동작한다. 원본은 모든 웹 작업을 가로채도록 되어 있어 "설치됐거나 이름을 불렀을 때만" 쓰도록 바꿨다.
+- `taste`는 40MB(이미지 자산 포함)라 코워크용 ZIP에서는 자산 폴더를 뺐다. 제 성능은 클로드 코드에서 나온다.
+- `taste`와 `frontend-design`은 역할이 겹친다. 웹사이트 하나에 둘 중 하나만 쓴다.
+
+---
+
+## 2차 추가 — "30개 플러그인" 목록에서 고른 것
+
+### 새로 설치한 4개
+
+| 스킬 | 효과 | 쓰는 법 |
+|---|---|---|
+| `/i-have-adhd` | 답·다음 행동을 첫 줄에, 단계는 번호로, 서론·맺음말 삭제. 세션 내내 유지 | 시작할 때 `/i-have-adhd` 한 번. 끄기: "stop adhd mode" |
+| `/humanizer` | AI가 쓴 티(“단순히 X가 아니라 Y”, 과장, 굵은 글씨 남발, 맺음 한 줄)를 걷어냄 | 공지문·메일 초안 뒤에 `/humanizer 아래 글 다듬어줘` |
+| `/caveman` | 군더더기 없는 초간결 답변으로 토큰 절약. 세션 내내 유지 | 사용량 한도가 빠듯한 날 `/caveman`. 끄기: "normal mode" |
+| `/karpathy-guidelines` | 코드 작성 시 가정 먼저 밝히기·최소 코드·요청한 곳만 수정 | 코드·스크립트·엑셀 매크로 요청할 때 자동 적용 |
+
+- `i-have-adhd`와 `caveman`은 둘 다 "답 먼저" 스타일이라 **동시에 켜지 말 것.** 평소엔 adhd, 토큰 아낄 땐 caveman.
+- `humanizer`는 영어 사례 위주지만 규칙("X가 아니라 Y" 구조, 과장, 장식용 굵은 글씨)은 한국어에도 그대로 적용된다.
+- `caveman`의 `ultra`·`wenyan` 모드는 별도 스킬이라 설치하지 않았다(기본 모드만).
+
+### 이미 갖고 있는 것 (설치 불필요)
+
+| 목록 이름 | 지금 쓸 수 있는 것 |
+|---|---|
+| Superpowers, Agent Skills | 이 계정에 이미 설치됨 (`superpowers:*`, `agent-skills:*`) |
+| Graphify, Agent Reach | 이미 설치됨 |
+| Ponytail | 이미 설치됨 (`/ponytail`) |
+| Skills by Anthropic | docx·pdf·pptx·xlsx 스킬, frontend-design 이미 있음 |
+| ECC | 핵심 4개 명령 옮겨둠 (아래 부록) |
+| Headroom | 7순위 참고 (내 컴퓨터에 설치하는 프로그램) |
+| PPT Master | `pptx` 스킬로 대체 |
+| Diagram Design, Archify | 다이어그램은 기본 기능으로 가능 |
+| Marketing Skills | `marketing:*` 플러그인 이미 있음 |
+
+### 나중에 고려 (조건이 맞으면)
+
+| 이름 | 왜 보류 |
+|---|---|
+| Claude-Mem | 세션 간 기억. 내 컴퓨터 Claude Code + Node.js 필요. 코워크엔 자체 메모리 기능이 있음 |
+| Last 30 Days | Reddit·X 최근 30일 트렌드 조사. 파이썬 스크립트·API 키가 있어야 제 성능 |
+| UI UX Pro Max, Taste, Impeccable | 디자인 스킬. `frontend-design` + `aura-farming`과 역할이 겹침 |
+
+### 맞지 않아 제외
+
+| 이름 | 이유 |
+|---|---|
+| REA | 앱·바이너리 리버스 엔지니어링 — 업무와 무관 |
+| Career Ops | 구직자용 채용공고 스캐너 (채용 담당자용 아님) |
+| HyperFrames, OpenMontage | 영상 제작 파이프라인 |
+| gstack, GSD, BMAD Method, Matt Pocock Skills, Understand Anything | 개발자용 대형 프레임워크 — 컨텍스트 소모 큼 |
+
+※ 카드에 적힌 별(★) 숫자는 출처마다 크게 달라 신뢰하지 않았다.
+
+---
+
+## 부록 — Everything Claude Code (핵심만 옮김)
+
+원래는 `/plugin`으로 설치하는 플러그인이지만, 웹·클라우드 환경에서는 플러그인이 막혀 있다.
+그래서 개발 언어와 상관없는 핵심 명령어 4개와 에이전트 3개만 이 저장소에 직접 복사했다.
+기존 명령과 이름이 겹치지 않게 앞에 `ecc-`를 붙였다.
+
+| 명령어 | 하는 일 |
+|---|---|
+| `/ecc-plan 기능 설명` | 요구사항 재정리 → 위험 → 단계별 계획. **"진행"이라고 할 때까지 코드를 건드리지 않음** |
+| `/ecc-code-review` | 커밋 안 된 변경을 보안·품질 기준으로 검토. PR 번호를 주면 PR 리뷰 |
+| `/ecc-build-fix` | 빌드 에러를 하나씩 최소 수정으로 고침. 같은 에러 3번 실패하면 멈추고 물어봄 |
+| `/ecc-test-coverage` | 커버리지 80% 미만 파일을 찾아 테스트 추가 |
+
+에이전트: `planner`(읽기 전용 계획), `code-reviewer`, `build-error-resolver`.
+
+**원본에서 바꾼 점**
+- `/ecc-code-review` PR 모드: 원래는 GitHub에 리뷰를 자동 게시하고 승인까지 하는데, 요청할 때만 게시하도록 바꿨다.
+- `code-reviewer` 에이전트: "모든 코드 변경에 반드시 사용"이라는 설명을 "요청할 때 사용"으로 바꿨다(매번 자동 실행 방지).
+
+전체(스킬 314개·명령어 98개)는 내 컴퓨터의 Claude Code 터미널에서 플러그인으로 설치하면 된다.
+```
+/plugin marketplace add affaan-m/everything-claude-code
+/plugin install everything-claude-code@everything-claude-code
+```
+
+---
+
+## 설치 위치와 출처
+
+| 스킬 | 출처 | 라이선스 |
+|---|---|---|
+| crash-out, aura-farming, 67, larp, china-maxing | github.com/Jakeschincariol/claude-illegal-codes | MIT |
+| frontend-design | github.com/anthropics/skills | Apache-2.0 |
+| task-observer | github.com/rebelytics/one-skill-to-rule-them-all | CC BY 4.0 |
+| handoff | 이 저장소에서 직접 작성 | — |
+| i-have-adhd | github.com/ayghri/i-have-adhd | MIT |
+| humanizer | github.com/blader/humanizer | MIT |
+| caveman | github.com/JuliusBrussee/caveman | Apache-2.0 |
+| karpathy-guidelines | github.com/forrestchang/andrej-karpathy-skills | MIT (README 기재) |
+| awesome-design (디자인 파일 84개) | github.com/VoltAgent/awesome-design-md | MIT |
+| taste | github.com/Leonxlnx/taste-skill | MIT |
+| web-design-guidelines | github.com/vercel-labs/agent-skills, web-interface-guidelines | MIT |
+| agent-browser | github.com/vercel-labs/agent-browser | Apache-2.0 |
+| egm-* (7개) | github.com/google/elephant-goldfish-model | Apache-2.0 |
+| astryx | github.com/meta/astryx | MIT |
+| image-to-code, limit-saver, infographic-kit | 이 저장소에서 직접 작성 (아이콘은 Lucide, ISC) | — |
+| ecc-* 명령어, planner·code-reviewer·build-error-resolver 에이전트 | github.com/affaan-m/everything-claude-code | MIT |
+
+다른 프로젝트에서도 쓰려면 `.claude/skills/<이름>/` 폴더를 `~/.claude/skills/`로 복사한다.

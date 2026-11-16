@@ -1,0 +1,447 @@
+{
+ "급여": [
+  "wallet",
+  "banknote",
+  "hand-coins",
+  "receipt"
+ ],
+ "임금": [
+  "banknote",
+  "coins",
+  "hand-coins"
+ ],
+ "연봉": [
+  "badge-dollar-sign",
+  "trending-up",
+  "banknote"
+ ],
+ "상여": [
+  "gift",
+  "party-popper",
+  "coins"
+ ],
+ "수당": [
+  "circle-plus",
+  "coins",
+  "piggy-bank"
+ ],
+ "세금": [
+  "receipt-text",
+  "landmark",
+  "calculator"
+ ],
+ "원천세": [
+  "receipt-text",
+  "file-minus",
+  "landmark"
+ ],
+ "연말정산": [
+  "calculator",
+  "file-spreadsheet",
+  "receipt"
+ ],
+ "4대보험": [
+  "shield-check",
+  "umbrella",
+  "heart-pulse"
+ ],
+ "보험": [
+  "umbrella",
+  "shield-check"
+ ],
+ "퇴직": [
+  "door-open",
+  "log-out",
+  "hourglass"
+ ],
+ "퇴직금": [
+  "piggy-bank",
+  "vault",
+  "hand-coins"
+ ],
+ "입사": [
+  "log-in",
+  "user-plus",
+  "door-open"
+ ],
+ "채용": [
+  "user-plus",
+  "user-search",
+  "briefcase"
+ ],
+ "면접": [
+  "messages-square",
+  "mic",
+  "user-check"
+ ],
+ "지원자": [
+  "user-search",
+  "file-user",
+  "users"
+ ],
+ "근태": [
+  "clock",
+  "calendar-clock",
+  "timer"
+ ],
+ "출퇴근": [
+  "clock-arrow-up",
+  "clock",
+  "map-pin"
+ ],
+ "초과근무": [
+  "alarm-clock-check",
+  "moon",
+  "timer"
+ ],
+ "야근": [
+  "moon",
+  "alarm-clock-check",
+  "lamp-desk"
+ ],
+ "휴가": [
+  "tree-palm",
+  "plane",
+  "calendar-days"
+ ],
+ "연차": [
+  "calendar-check",
+  "sun",
+  "tree-palm"
+ ],
+ "병가": [
+  "thermometer",
+  "stethoscope",
+  "bed"
+ ],
+ "육아휴직": [
+  "baby",
+  "heart-handshake",
+  "house-heart"
+ ],
+ "평가": [
+  "clipboard-check",
+  "chart-bar",
+  "star"
+ ],
+ "성과": [
+  "trophy",
+  "target",
+  "trending-up"
+ ],
+ "목표": [
+  "target",
+  "flag",
+  "crosshair"
+ ],
+ "승진": [
+  "circle-arrow-up",
+  "medal",
+  "trending-up"
+ ],
+ "보상": [
+  "award",
+  "gift",
+  "gem"
+ ],
+ "교육": [
+  "graduation-cap",
+  "book-open",
+  "presentation"
+ ],
+ "역량": [
+  "brain",
+  "sparkles",
+  "dumbbell"
+ ],
+ "복지": [
+  "heart-handshake",
+  "coffee",
+  "gift"
+ ],
+ "건강검진": [
+  "stethoscope",
+  "heart-pulse",
+  "activity"
+ ],
+ "계약": [
+  "signature",
+  "pen-tool",
+  "handshake"
+ ],
+ "근로계약": [
+  "signature",
+  "file-check",
+  "handshake"
+ ],
+ "규정": [
+  "book-bookmark",
+  "scroll-text",
+  "list-checks"
+ ],
+ "노무": [
+  "scale",
+  "gavel",
+  "briefcase"
+ ],
+ "법": [
+  "scale",
+  "gavel",
+  "landmark"
+ ],
+ "감독": [
+  "search-check",
+  "eye",
+  "clipboard-list"
+ ],
+ "점검": [
+  "list-checks",
+  "search-check",
+  "clipboard-check"
+ ],
+ "위험": [
+  "triangle-exclamation-point",
+  "siren",
+  "shield-exclamation-point"
+ ],
+ "보안": [
+  "lock",
+  "shield",
+  "key-round"
+ ],
+ "개인정보": [
+  "fingerprint-pattern",
+  "lock-keyhole",
+  "user-lock"
+ ],
+ "조직": [
+  "network",
+  "building",
+  "users"
+ ],
+ "조직도": [
+  "network",
+  "git-fork",
+  "workflow"
+ ],
+ "부서": [
+  "building",
+  "layers",
+  "boxes"
+ ],
+ "팀": [
+  "users",
+  "users-round",
+  "user-round-check"
+ ],
+ "직원": [
+  "user",
+  "id-card",
+  "contact"
+ ],
+ "인원": [
+  "users",
+  "chart-column",
+  "hash"
+ ],
+ "회의": [
+  "calendar-range",
+  "messages-square",
+  "presentation"
+ ],
+ "보고서": [
+  "file-text",
+  "notebook-pen",
+  "chart-pie"
+ ],
+ "결재": [
+  "stamp",
+  "check-check",
+  "signature"
+ ],
+ "승인": [
+  "badge-check",
+  "check-check",
+  "thumbs-up"
+ ],
+ "반려": [
+  "circle-x",
+  "undo-2",
+  "thumbs-down"
+ ],
+ "메일": [
+  "mail",
+  "send",
+  "inbox"
+ ],
+ "알림": [
+  "bell",
+  "bell-ring",
+  "megaphone"
+ ],
+ "공지": [
+  "megaphone",
+  "pin",
+  "newspaper"
+ ],
+ "일정": [
+  "calendar",
+  "calendar-days",
+  "alarm-clock"
+ ],
+ "데이터": [
+  "database",
+  "table",
+  "chart-line"
+ ],
+ "엑셀": [
+  "sheet",
+  "file-spreadsheet",
+  "table-2"
+ ],
+ "분석": [
+  "chart-line",
+  "chart-scatter",
+  "microscope"
+ ],
+ "통계": [
+  "chart-pie",
+  "chart-column",
+  "sigma"
+ ],
+ "검색": [
+  "search",
+  "scan-search",
+  "text-search"
+ ],
+ "자동화": [
+  "bot",
+  "workflow",
+  "repeat"
+ ],
+ "AI": [
+  "sparkles",
+  "brain-circuit",
+  "bot"
+ ],
+ "에이전트": [
+  "bot",
+  "cpu",
+  "brain-circuit"
+ ],
+ "도구": [
+  "wrench",
+  "hammer",
+  "toolbox"
+ ],
+ "설정": [
+  "settings",
+  "sliders-horizontal",
+  "cog"
+ ],
+ "API": [
+  "plug",
+  "cable",
+  "webhook"
+ ],
+ "서버": [
+  "server",
+  "hard-drive",
+  "cloud"
+ ],
+ "문서": [
+  "file-text",
+  "files",
+  "folder-open"
+ ],
+ "파일": [
+  "file",
+  "folder",
+  "paperclip"
+ ],
+ "질문": [
+  "circle-question-mark",
+  "message-circle-question-mark",
+  "search"
+ ],
+ "답변": [
+  "message-square-text",
+  "reply",
+  "message-circle"
+ ],
+ "검증": [
+  "shield-check",
+  "badge-check",
+  "scan-eye"
+ ],
+ "실패": [
+  "circle-x",
+  "octagon-x",
+  "bug"
+ ],
+ "성공": [
+  "circle-check",
+  "party-popper",
+  "check"
+ ],
+ "시작": [
+  "play",
+  "rocket",
+  "flag"
+ ],
+ "완료": [
+  "flag",
+  "circle-check",
+  "trophy"
+ ],
+ "비용": [
+  "receipt",
+  "credit-card",
+  "calculator"
+ ],
+ "예산": [
+  "piggy-bank",
+  "chart-pie",
+  "wallet"
+ ],
+ "고객": [
+  "user-round",
+  "heart",
+  "contact"
+ ],
+ "협업": [
+  "handshake",
+  "users",
+  "share-2"
+ ],
+ "소통": [
+  "messages-square",
+  "message-circle",
+  "phone"
+ ],
+ "아이디어": [
+  "lightbulb",
+  "sparkles",
+  "brain"
+ ],
+ "개선": [
+  "trending-up",
+  "wrench",
+  "refresh-cw"
+ ],
+ "시간": [
+  "clock",
+  "hourglass",
+  "timer"
+ ],
+ "위치": [
+  "map-pin",
+  "map",
+  "navigation"
+ ],
+ "건물": [
+  "building",
+  "factory",
+  "warehouse"
+ ]
+}
