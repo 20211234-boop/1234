@@ -1,7 +1,20 @@
 # 내 컴퓨터에 스킬 설치하기
 
-이 저장소에 모아 둔 스킬 18개와 명령어 4개를 회사 컴퓨터의 Claude Code와 코워크에 설치하는 방법이다.
+이 저장소에 모아 둔 스킬 27개와 명령어 4개를 회사 컴퓨터의 Claude Code와 코워크에 설치하는 방법이다.
 위에서부터 순서대로 하면 된다. 각 단계는 5분 안팎.
+
+## 어디서 무엇이 되나
+
+| 기능 | 코워크 | Claude Code (내 컴퓨터) | 클라우드 세션 (웹) |
+|---|---|---|---|
+| 스킬 27개 | ✅ ZIP 업로드 | ✅ 폴더 복사 | ✅ 이 저장소에 이미 있음 |
+| ecc 명령어 4개 | ✅ 스킬로 바꾼 ZIP | ✅ `~/.claude/commands` | ✅ |
+| 에이전트 3개 (planner 등) | ❌ | ✅ `~/.claude/agents` | ✅ |
+| "스킬 자동 선택" 표 (CLAUDE.md) | ❌ (대신 각 스킬 설명으로 자동 선택) | ✅ | ✅ |
+| `/compact`, `/context` | ❌ (`/handoff` 후 새 대화로 대신) | ✅ | ✅ |
+| 플러그인 (`/plugin`) | 코워크 Plugins 메뉴 | ✅ | ❌ 막혀 있음 |
+| taste 이미지 자산 | ❌ (가벼운 버전) | ✅ | ✅ |
+| agent-browser, astryx, Headroom 프로그램 | ❌ | ✅ 설치 필요 | ❌ |
 
 > **먼저 확인:** 회사 컴퓨터에 프로그램(Git, Node.js)을 설치하거나 외부 GitHub 파일을 받는 것이
 > 사내 보안 규정상 허용되는지 IT 담당자에게 확인한다. 1단계(코워크 업로드)는 프로그램 설치가 필요 없다.
@@ -22,21 +35,28 @@
 
 ## 1단계. 코워크에 올리기 (프로그램 설치 없음)
 
-이 대화에서 받은 ZIP 묶음 5개를 쓴다.
+**`all-skills-cowork.zip` 하나만 쓴다.** 이전에 받은 묶음(cowork-skills, design-skills 등)은 옛 버전이니 버린다.
+안에 31개(스킬 27 + ecc 명령어 4)가 최신판으로 들어 있다.
 
-| 묶음 파일 | 들어 있는 스킬 |
-|---|---|
-| `cowork-skills.zip` | handoff, crash-out, frontend-design, aura-farming, 67, larp, china-maxing, task-observer, ecc-plan, ecc-code-review, ecc-build-fix, ecc-test-coverage |
-| `cowork-skills-2.zip` | i-have-adhd, humanizer, caveman, karpathy-guidelines |
-| `limit-skills.zip` | limit-saver (caveman, handoff는 위와 중복) |
-| `design-skills.zip` | awesome-design, taste(가벼운 버전), image-to-code, web-design-guidelines, agent-browser |
-
-1. 묶음 파일을 **한 번만** 압축 해제한다. 안에서 나온 `스킬이름.zip`은 풀지 않는다.
+1. `all-skills-cowork.zip`을 **한 번만** 압축 해제한다. 안에서 나온 `스킬이름.zip`은 풀지 않는다.
 2. Claude 앱 → **Customize → Skills → "+" → Upload a skill**
 3. `스킬이름.zip`을 하나씩 올린다. 올리면 자동으로 켜진다.
-4. 이미 올린 스킬은 건너뛴다 (목록에 `crash-out` 같은 이름이 보이면 이미 있는 것).
+4. **이미 올린 스킬 중 아래 두 가지는 지우고 다시 올린다** (설명이 바뀌어 자동 실행 조건이 달라졌다).
+   - `infographic-kit` — "픽토그램 넣어줘"로 자동 실행
+   - `egm-*` 7개 — "egm 써줘"로 실행
+   나머지는 이미 있으면 건너뛴다.
 
-**우선 올릴 것 (이것만 해도 충분):** handoff, limit-saver, crash-out, i-have-adhd, humanizer, aura-farming, awesome-design
+**우선순위별로 올리기 (다 올릴 필요 없다)**
+
+| 순서 | 스킬 | 이유 |
+|---|---|---|
+| 1 (필수) | handoff, limit-saver, crash-out, infographic-kit | 매일 쓰는 것 |
+| 2 (문서) | humanizer, i-have-adhd, awesome-design, aura-farming, egm-review, egm-brainstorm, egm-draft, egm-resolve | 보고서·기획서·공지 |
+| 3 (웹·코드) | frontend-design, taste, image-to-code, web-design-guidelines, karpathy-guidelines, ecc-plan, ecc-code-review | 프로그램 만들 때 |
+| 4 (가끔) | caveman, 67, larp, egm-review-loop, egm-bootstrap, egm-drift-report, ecc-build-fix, ecc-test-coverage | 필요할 때만 |
+| 5 (보류) | task-observer, china-maxing, agent-browser, astryx | 무겁거나 프로그램 설치 필요 |
+
+많이 올릴수록 Claude가 어떤 스킬을 고를지 헷갈릴 수 있다. 1·2번부터 올리고 필요할 때 추가한다.
 
 업로드 메뉴가 안 보이면 회사 관리자가 스킬 기능을 꺼 둔 것이다. 관리자에게 요청한다.
 
@@ -163,3 +183,17 @@ headroom wrap claude              # Headroom을 거쳐 Claude Code 실행
 | 스킬이 너무 많아 느림 | 안 쓰는 스킬 폴더를 지우거나, 코워크에서 스위치를 끈다 (특히 task-observer, taste, 67) |
 
 사용법은 `SKILLS-GUIDE.md` 참고.
+
+---
+
+## 부록. 설치 후 첫 테스트 (5분)
+
+| 테스트 | 입력 | 정상이면 |
+|---|---|---|
+| 도식 자동 실행 | "연차 신청 승인 흐름에 픽토그램 넣어서 그려줘" | 아이콘이 겹치지 않는 흐름도가 나온다 |
+| EGM 실행 | "egm 써줘 — 신입 온보딩을 2주에서 1주로 줄이고 싶어" | 질문으로 아이디어를 정리하기 시작한다 |
+| 사실 검증 | "/crash-out 올해 최저임금 시급 맞는지 확인해줘" | 검증됨/불확실/틀림으로 나눠 답한다 |
+| 한도 절약 | "토큰 아껴줘" | "한도 절약 모드 켰습니다" 한 줄 |
+| 인수인계 | "/handoff" | HANDOFF.md(코워크는 정리 문서)가 만들어진다 |
+
+하나라도 안 되면 그 스킬이 목록에 켜져 있는지 먼저 확인한다.
