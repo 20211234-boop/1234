@@ -301,7 +301,15 @@ details.defs dd { margin: 0; }
   .tile { padding: 16px; }
   details.defs dl { grid-template-columns: 1fr; }
 }
-.credit { font-size: 10.5px; opacity: .7; letter-spacing: .02em; }
+.maker { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.maker-av { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 15px; color: #fff; background: linear-gradient(135deg, #ff8a65, #ff5a5f); flex: none; }
+.maker-t { display: grid; line-height: 1.25; }
+.maker-t b { font-size: 14px; font-weight: 700; }
+.maker-t small { font-size: 11.5px; color: var(--muted); }
+.maker + .side-foot { margin-top: 8px; }
+.app.mini .maker { padding: 6px; justify-content: center; } .app.mini .maker-t { display: none; }
+@media (max-width: 900px) { .maker { margin-top: 0; padding: 6px 10px; box-shadow: none; } .maker-t small { display: none; } }
+.credit { font-size: 13px; font-weight: 600; color: var(--fg); opacity: 1; }
 </style>
 
 <div class="app">
@@ -318,6 +326,7 @@ details.defs dd { margin: 0; }
       <div class="nav-i"><span><span class="dot"></span>입·퇴사</span><small>준비 중</small></div>
       <div class="nav-i"><span><span class="dot"></span>채용</span><small>준비 중</small></div>
     </nav>
+    <div class="maker"><span class="maker-av">세</span><span class="maker-t"><b>세현</b><small>제작 · HR팀</small></span></div>
     <div class="side-foot">HR팀 · 내부용</div>
   </aside>
 
