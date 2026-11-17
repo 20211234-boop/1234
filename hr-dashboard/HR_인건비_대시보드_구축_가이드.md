@@ -1,6 +1,6 @@
 # HR 인건비 대시보드 구축 가이드
 
-2026-11-15 · 제작 세현 (인사팀)
+2026-11-15 · 인사팀
 
 인건비 대시보드 시안과 입력 양식이 준비되어 있습니다. 회사에서 양식에 실제 숫자를 채워 화면에 끌어다 놓으면 바로 운영할 수 있습니다.
 
@@ -127,3 +127,5 @@ GitHub 위치: `20211234-boop/1234` 저장소, 브랜치 `ccr-ef63ca55-3duduh`. 
 - [HR dashboard design examples (AdminLTE)](https://adminlte.io/blog/hr-dashboard-design-examples/)
 - [Build a payroll dashboard that cuts labor cost blind spots (FanRuan)](https://fanruan.com/en/blog/build-a-payroll-dashboard-that-cuts-labor-cost-blind-spots)
 - [HR dashboard examples (HiBob)](https://www.hibob.com/blog/hr-dashboard-examples/)
+
+<sub>제작 세현</sub>
