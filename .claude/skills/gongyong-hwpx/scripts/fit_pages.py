@@ -1,0 +1,732 @@
+# -*- coding: utf-8 -*-
+"""쪽 맞춤(Fitter의 일부): □·○ 묶음 한 쪽에, 줄 간격·빈 줄·그래프 높이, 한 쪽 넘는 표, 빈 쪽 채우기, 참고 쪽 채우기."""
+from fit_base import *  # noqa: F401,F403 — 상수·공통 함수(HWPUNIT_PER_MM, T, re, copy …)
+
+
+class PageFit:
+    # ------------------------------------------------------------ 쪽 맞춤
+    def spacer_kinds(self):
+        """견본의 빈 줄 문단 모양: {(문단모양, 글자모양): 높이}."""
+        kinds = {}
+        for p in self.b.protos:
+            if not is_blank(p):
+                continue
+            runs = para_runs(p)
+            if runs:
+                kinds[(p.get("paraPrIDRef"), runs[-1].get("charPrIDRef"))] = self.lay.para_height(p, self.body_w)[0]
+        return kinds
+
+    def heads(self):
+        """큰 묶음의 첫 문단: Ⅰ.·□ 제목(바로 앞도 제목이면 그 앞 제목부터)과 참고 머리표(한 줄짜리 여러 칸 표).
+        큰 묶음은 다음 큰 묶음 앞까지 — 가급적 한 쪽에 들어가게 한다(사용자 원칙 9, 2026-10-31)."""
+        out, prev_head = set(), False
+        for p in self.paras():
+            tables = para_tables(p)
+            is_head = ((marker_level(para_text(p)) == 1 and not is_table_title(p)) if not tables
+                       else tables[0].get("rowCnt") == "1" and tables[0].get("colCnt") != "1")
+            if is_head and not prev_head:
+                out.add(p)
+            prev_head = is_head
+        return out
+
+    def badness(self, seg):
+        where, used = self.lay.paginate(seg, self.body_w, self.body_h - SAFETY, self.heads(), BLOCK_GAP)
+        gaps = sum(self.body_h - u for u in used[:-1] if self.body_h - u > self.body_h * BIG_GAP)
+        # 한 쪽에 들어갈 만한 □ 묶음이 두 쪽에 걸치면(끝 ○ 하나만 다음 쪽으로 떨어지는 등) 줄 간격을 줄여서라도
+        # 한 쪽에 넣는다 — '(시제품) 줄이 다음 장으로 넘어감' 사용자 지적(2026-10-31). 쪽 수를 늘리는 것보다는 가볍게 친다.
+        split = len(self.lay.split) * self.body_h * 2
+        return len(used) * self.body_h * 10 + split + gaps, len(used)
+
+    def fit_pages(self):
+        self.line_orig = getattr(self, "line_orig", {})
+        kinds = self.spacer_kinds()
+        narrow = min(kinds, key=kinds.get) if kinds else None
+        segs, cur = [], []
+        for p in self.paras():
+            if p.get("pageBreak") == "1" and cur:
+                segs.append(cur)
+                cur = []
+            cur.append(p)
+        if cur:
+            segs.append(cur)
+        changed = []
+        for seg in segs:
+            spacers = []
+            if narrow:
+                for p in seg:
+                    runs = para_runs(p)
+                    if not is_blank(p) or not runs:
+                        continue
+                    k = (p.get("paraPrIDRef"), runs[-1].get("charPrIDRef"))
+                    if k in kinds and kinds[k] > kinds[narrow]:
+                        spacers.append(p)
+            texts = [p for p in seg if not para_tables(p) and para_text(p).strip()
+                     and self.st.para.get(p.get("paraPrIDRef"), {}).get("line_type") == "PERCENT"]
+            summary_gap = self._summary_gap(seg)
+            saved = {p: (p.get("paraPrIDRef"), [r.get("charPrIDRef") for r in para_runs(p)])
+                     for p in spacers + texts + ([summary_gap] if summary_gap is not None else [])}
+            for p, (pid, _) in saved.items():  # 줄이기 전 문단 모양 — 자리가 남는 마지막 본문 쪽은 되돌림(spread_pages)
+                self.line_orig.setdefault(p, pid)
+            figs = [(t, cells) for p in seg for t in para_tables(p) for cells in [self._figure_cells(t)] if cells]
+            fig_h = {el: int(el.find(T("hp:cellSz" if el.tag == T("hp:tc") else "hp:sz")).get("height", "0"))
+                     for t, cells in figs for el in [t, *cells]}
+
+            def restore():
+                for p, (pid, cids) in saved.items():
+                    p.set("paraPrIDRef", pid)
+                    for r, c in zip(para_runs(p), cids):
+                        r.set("charPrIDRef", c)
+                for el, h in fig_h.items():
+                    el.find(T("hp:cellSz" if el.tag == T("hp:tc") else "hp:sz")).set("height", str(h))
+
+            def shrink_fig(t, cells, pct):
+                # 표가 한두 줄 넘쳐 거의 빈 쪽이 생길 때는 그 묶음의 그래프 높이를 줄인다(사용자 2026-11-04
+                # '이럴땐 그래프의 높이를 줄이면 되죠') — 그림 칸(크기에 맞춤 채우기)만 낮추고 그래프 제목 칸·너비는 그대로
+                cut = 0
+                for tc in cells:
+                    h = fig_h[tc]
+                    new = int(round(h * (100 - pct) / 100))
+                    tc.find(T("hp:cellSz")).set("height", str(new))
+                    cut += h - new
+                t.find(T("hp:sz")).set("height", str(fig_h[t] - cut))
+
+            def shrink_spacers():
+                # 한 줄 빈 줄을 좁은 빈 줄(8pt)로 바꾸면 □ 사이가 너무 좁다는 사용자 의견(2026-10-31)
+                # → 글자 크기는 두고 줄 간격만 100%로(14pt 기준 약 7.9mm → 4.9mm)
+                for p in spacers:
+                    pid = saved[p][0]
+                    if self.st.para.get(pid, {}).get("line_type") == "PERCENT" and \
+                            self.st.para.get(pid, {}).get("line", 0) > SPACER_LINE:
+                        p.set("paraPrIDRef", self.b.hedit.para_line(pid, SPACER_LINE))
+
+            def line_to(v):
+                # 본문 줄 간격(가장 많이 쓴 값)을 v로 낮추고, 그보다 넓은 줄(제목 250·190·170% 등)은 같은 폭(본문 − v)만큼만
+                # 낮춰 위계를 지킨다 — 옛 판은 v보다 넓은 줄을 모두 v로 맞춰 제목이 본문과 같아졌음(사용자 작업 2026-11-06)
+                d = body - v
+                for p in texts:
+                    pid = saved[p][0]
+                    cur = self.st.para.get(pid, {}).get("line", 0)
+                    new = cur - d if cur >= body else (v if cur > v else cur)
+                    if p in self.b.law_paras or p in self.b.law_notes:  # 참고 근거법령은 160%까지만(사용자 2026-11-18)
+                        new = max(new, min(cur, LAW_LINE_MIN))
+                    if new != cur:
+                        p.set("paraPrIDRef", self.b.hedit.para_line(pid, new))
+
+            def shrink_spacers2():
+                # 그래도 모자라면 □ 사이 빈 줄을 70%까지 — 표 위·아래 여백은 지키고 위쪽을 줄임(사용자 2026-11-05)
+                for p in spacers:
+                    pid = saved[p][0]
+                    if self.st.para.get(pid, {}).get("line_type") == "PERCENT" and \
+                            self.st.para.get(pid, {}).get("line", 0) > SPACER_LINE2:
+                        p.set("paraPrIDRef", self.b.hedit.para_line(pid, SPACER_LINE2))
+
+            def shrink_summary():
+                # 요약 상자 아래 빈 줄(근거법령 위)만 좁힌다 — 다른 □ 사이·○ 간격은 그대로(사용자 2026-11-05)
+                pid = saved[summary_gap][0]
+                if self.st.para.get(pid, {}).get("line_type") == "PERCENT" and \
+                        self.st.para.get(pid, {}).get("line", 0) > SUMMARY_GAP_LINE:
+                    summary_gap.set("paraPrIDRef", self.b.hedit.para_line(pid, SUMMARY_GAP_LINE))
+
+            def halve_prev():
+                # ○ 위 간격(묶음 구분)을 절반으로 — 표 제목·표 아래 여백보다 먼저 양보
+                for p in texts:
+                    pid = p.get("paraPrIDRef")
+                    pv = self.st.para.get(pid, {}).get("prev", 0)
+                    if pv >= 300 and marker_level(para_text(p)) == 2:  # ○ 줄만(날짜 줄·□·■ 제목은 그대로)
+                        p.set("paraPrIDRef", self.b.hedit.para_margin(pid, "prev", pv // 2))
+
+            # 덜 바꾸는 것부터: 줄 간격을 5%씩 낮춰 보고(사용자 지시 '줄간 조정'), 그다음 □ 사이 빈 줄 좁히기를 더한다
+            lines_now = [self.st.para.get(saved[p][0], {}).get("line", 0) for p in texts]
+            body = max(set(lines_now), key=lines_now.count) if lines_now else 0  # 본문 줄 간격(가장 많이 쓴 값)
+            top = body  # 비용·단계는 본문 줄 간격 기준(제목 줄은 같은 폭만큼만 따라 낮춤 — line_to)
+            steps = list(range(top - 5, self.min_line - 1, -5)) if top > self.min_line else []
+            # 바꾸는 정도(덜 바꿀수록 좋음): 줄 간격은 낮춘 %만큼, □ 사이 빈 줄 좁히기는 줄 간격 10%쯤으로 친다
+            # — 같은 쪽 수라면 본문 140%보다 '빈 줄 좁힘 + 155%'가 덜 답답하다(2026-10-31)
+            plans = [("그대로", 0, lambda: None)]
+            plans += [(f"줄 간격 {v}%", top - v, lambda v=v: line_to(v)) for v in steps]
+            for k, (t, cells) in enumerate(figs):
+                name = "그래프" if len(figs) == 1 else f"그래프({k + 1}번째)"
+                plans += [(f"{name} 높이 {v}% 줄임", v * FIG_COST, lambda t=t, cells=cells, v=v: shrink_fig(t, cells, v))
+                          for v in FIG_SHRINK]
+                # 그래프만으로 모자라면 줄 간격과 함께(가장 많이 줄인 그래프에 줄 간격 단계를 더함)
+                v = FIG_SHRINK[-1]
+                plans += [(f"{name} 높이 {v}% 줄임 + 줄 간격 {w}%", v * FIG_COST + top - w,
+                           lambda t=t, cells=cells, v=v, w=w: (shrink_fig(t, cells, v), line_to(w))) for w in steps]
+            if spacers:
+                plans.append(("□ 사이 빈 줄 조금 좁힘", SPACER_COST, shrink_spacers))
+                plans += [(f"□ 사이 빈 줄 조금 좁힘 + 줄 간격 {v}%", SPACER_COST + top - v,
+                           lambda v=v: (shrink_spacers(), line_to(v))) for v in steps]
+            low = steps[-1] if steps else None
+            extra = []  # 마지막 수단(표 위아래 여백은 지키고 위쪽을 더 줄임 — 사용자 2026-11-05): 쪽 수가 줄 때만 고른다
+            if low is not None:
+                extra.append((f"□ 사이 빈 줄 조금 좁힘 + 줄 간격 {low}% + ○ 위 간격 절반", SPACER_COST + top - low + PREV_HALF_COST,
+                              lambda v=low: (shrink_spacers(), line_to(v), halve_prev())))
+                if spacers:
+                    extra.append((f"□ 사이 빈 줄 더 좁힘 + 줄 간격 {low}% + ○ 위 간격 절반", SPACER2_COST + top - low + PREV_HALF_COST,
+                                  lambda v=low: (shrink_spacers2(), line_to(v), halve_prev())))
+            if summary_gap is not None:  # 모든 안에 '요약 상자 아래 빈 줄 좁힘'을 붙인 안을 더함(가장 싸게)
+                plans += [(("" if name == "그대로" else name + " + ") + "요약 상자 아래 빈 줄 좁힘", cost + SUMMARY_GAP_COST,
+                           lambda act=act: (act(), shrink_summary())) for name, cost, act in list(plans)]
+            best = None
+            self.lay.row_cache, self.lay.row_nocache = {}, {t for t, _ in figs}
+            for name, cost, act in plans:
+                restore()
+                act()
+                bad, pages = self.badness(seg)
+                if best is None or bad < best[0] - 1 or (abs(bad - best[0]) <= 1 and cost < best[4]):
+                    best = (bad, name, act, pages, cost)
+            for name, cost, act in extra:
+                restore()
+                act()
+                bad, pages = self.badness(seg)
+                if pages < best[3] and (bad < best[0] - 1):
+                    best = (bad, name, act, pages, cost)
+            self.lay.row_cache = None
+            restore()
+            best[2]()
+            if best[1] != "그대로":
+                changed.append(f"{best[1]}(어림 {best[3]}쪽)")
+        if changed:
+            self.notes.append("쪽이 애매하게 넘어가지 않도록 " + ", ".join(changed) + "으로 맞췄습니다.")
+        self.force_breaks()
+
+    def _summary_gap(self, seg):
+        """그 묶음(첫 쪽)에서 요약 상자 바로 아래 빈 줄 — 제목 상자(한 칸 표) → 날짜·부서 줄 → 요약 상자(한 칸 표) → 빈 줄. 없으면 None."""
+        head = seg[:6]
+        for k, p in enumerate(head):
+            if k == 0 or k + 1 >= len(head) or para_tables(p) or not DATE_HEAD_RE.match(para_text(p)):
+                continue
+            box = head[k + 1]
+            tables = para_tables(box)
+            if not tables or tables[0].get("rowCnt") != "1" or tables[0].get("colCnt") != "1":
+                return None
+            nxt = head[k + 2] if k + 2 < len(head) else None
+            return nxt if nxt is not None and is_blank(nxt) else None
+        return None
+
+    def force_breaks(self):
+        """묶음(□·○와 그 아래 -·*·※·표)이 쪽 끝에 다 들어가지 않아 다음 쪽으로 넘어갈 자리에는 쪽 나눔을 직접 넣는다.
+        한글의 '다음 문단과 함께'는 표가 든 문단에서 묶음을 다 끌고 가지 않을 때가 있어(실측), 계산한 대로 쪽을 나눈다."""
+        paras = self.paras()
+        heads = self.heads()
+        # 쪽 맞춤(badness)과 같은 높이(본문 - SAFETY)로 나눈다 — 높이가 다르면 □ 블록 가운데에 쪽 나눔이 들어감(2026-10-31).
+        # 묶음 나누기가 마지막에 잰 어림을 그대로 씀(같은 문서를 한 번 더 재면 긴 표 문서에서 0.6초쯤 더 걸림)
+        where = self._loosen_chains(paras, heads)
+        if where is None:
+            where, _ = self.lay.paginate(paras, self.body_w, self.body_h - SAFETY, heads, BLOCK_GAP)
+        # 쪽 나눔은 묶음 머리(□·○·이름표 문단·표 묶음)에만 박는다 — 이어지는 '-' 문단(논증 둘째 문단 등)은 한글이 스스로 넘기게
+        # (받은 요청 2026-11-22 1번: 의뢰서 갑설 둘째 '-' 문단에 쪽 나눔이 박힘 — 문단 보호가 걸린 문단이 쪽 끝에 안 들어가 넘어간 것을
+        #  쪽 나눔으로 박으면 글을 고친 뒤에도 그 자리에 남음)
+        targets = {i for i in self.lay.moved if self._break_head(paras, i)}
+        # 어림으로 쪽 맨 위에서 시작하는 □·참고 묶음도 쪽 나눔을 박아 둔다: 한글 쪽 내용이 어림보다 조금 짧으면
+        # □ 제목과 표 머리 줄만 앞 쪽 끝에 남는 일이 있었음(2026-10-31 시험 문서 참고1)
+        for i, p in enumerate(paras):
+            if p in heads and i > 0 and where[i][0] > 0:
+                k = i - 1
+                while k >= 0 and self._blank(paras[k]):
+                    k -= 1
+                if k >= 0 and where[k][1] < where[i][0]:
+                    targets.add(i)
+        n, dropped = 0, 0
+        for i in sorted(targets):
+            if i > 0 and paras[i].get("pageBreak") != "1":
+                paras[i].set("pageBreak", "1")
+                self.forced.add(paras[i])
+                n += 1
+            # 쪽 나눔 바로 앞 빈 줄은 앞 쪽 끝에 남거나 빈 쪽을 만들 뿐이라 뺀다
+            k = i - 1
+            while k > 0 and self._blank(paras[k]) and paras[k].get("pageBreak") != "1":
+                self.b.sec.remove(paras[k])
+                dropped += 1
+                k -= 1
+        if n:
+            self.notes.append(f"쪽 끝에 다 들어가지 않는 묶음 {n}곳은 묶음째 다음 쪽에서 시작하게 했습니다.")
+
+    def _keeps(self, p):
+        return self.st.para.get(p.get("paraPrIDRef"), {}).get("keep_next", False)
+
+    def _lead(self, p):
+        t = para_text(p)
+        return bool(para_tables(p)) or bool(UNIT_RE.match(t)) or t.lstrip().startswith("■")
+
+    def _break_head(self, paras, i):
+        """쪽 나눔을 박아도 되는 묶음 머리인가: 표·■ 제목·단위 줄, □·○, 참고 머리표, 이름표로 시작하는 문단((갑설)·〔부서 검토의견〕
+        ·'- (세부) …' 등), '질의…' 문단, 또는 묶음 안에 표가 든 것(한글의 '다음 문단과 함께'가 표를 다 끌고 가지 않을 때가 있음)."""
+        p = paras[i]
+        if self._lead(p) or self._is_ref_head(p):
+            return True
+        text = para_text(p)
+        if marker_level(text) in (1, 2):
+            return True
+        rest = split_marker(text)[2].lstrip(" ⎵⍽\t*")
+        if re.match(r"[(〔［\[][^)〕］\]\n]{1,14}[)〕］\]]", rest) or rest.startswith("질의"):
+            return True
+        j = i
+        while j + 1 < len(paras) and self._keeps(paras[j]) and paras[j + 1].get("pageBreak") != "1":
+            j += 1
+            if self._lead(paras[j]):
+                return True
+        return False
+
+    def _loosen_chains(self, paras, heads):
+        """'다음 문단과 함께'로 묶인 글 묶음(○와 그 아래 - 문단들)이 쪽 끝에 다 들어가지 않아 통째로 다음 쪽으로 가면 앞 쪽이
+        3분의 1 넘게 빌 때는 넘기지 않고 나눈다 — 머리 문단과 첫 아랫문단만 붙여 두고 그 아래 '-' 문단 사이의 묶음을 푼다
+        (받은 요청 2026-11-22 2번: 의뢰서 1쪽이 반쯤 빔). 표·■ 제목이 든 묶음은 그대로 통째로(사용자 원칙 2026-11-04 '큰 표는 밑으로
+        내려 한 장에'). □ 제목부터 이어진 묶음(□ → ○ → - …)도 같게 — □·○와 첫 '-'까지는 붙여 둠(의뢰서 '□ 자문 배경'이 통째로 넘어가
+        1쪽이 47%만 참, 2026-11-22 사용자 문서로 다시 만들어 봄)."""
+        lim = self.body_h - SAFETY
+        n = 0
+        for _ in range(8):
+            where, used = self.lay.paginate(paras, self.body_w, lim, heads, BLOCK_GAP)
+            hit = False
+            for i in list(self.lay.moved):
+                pg = where[i][0]
+                if pg < 1 or lim - used[pg - 1] <= self.body_h / 3:
+                    continue
+                j = i
+                while j + 1 < len(paras) and self._keeps(paras[j]) and paras[j + 1].get("pageBreak") != "1" \
+                        and paras[j + 1] not in heads:
+                    j += 1
+                chain = paras[i:j + 1]
+                if any(self._lead(p) for p in chain):
+                    continue
+                # 머리(□·○)와 첫 아랫문단(-·기호 없는 글 — 사이 빈 줄은 건너뜀)까지는 붙여 두고 그 뒤 묶음만 푼다. 머리가 '-'
+                # ('- (갑설) …'처럼 같은 수준 문단이 이어지는 묶음)면 머리부터 푼다 — 붙여 두면 긴 두 문단이 함께 넘어가 앞 쪽이 빔
+                if marker_level(para_text(paras[i])) in (1, 2):
+                    k0 = next((k for k in range(i + 1, j + 1) if para_text(paras[k]).strip()
+                               and marker_level(para_text(paras[k])) not in (1, 2)), j)
+                else:
+                    k0 = i
+                if j - k0 < 1:
+                    continue
+                for p in paras[k0:j]:
+                    p.set("paraPrIDRef", self.b.hedit.para_keep_off(p.get("paraPrIDRef")))
+                hit = True
+                n += 1
+            if not hit:
+                break
+        else:
+            where = None  # 여덟 번 다 풀었으면 마지막 어림이 지금 문서와 다름 — 부르는 쪽이 다시 잼
+        if n:
+            self.notes.append(f"쪽 끝에 다 들어가지 않는 글 묶음 {n}곳은 통째로 넘기면 앞 쪽이 3분의 1 넘게 비어, 넘기지 않고 "
+                              "아래 문단 사이에서 나눴습니다(머리 문단과 첫 아랫문단은 함께).")
+        return where  # 마지막에 잰 쪽 어림(그 뒤 바꾼 것 없음) — force_breaks가 다시 재지 않게
+
+    @staticmethod
+    def _blank(p):
+        return is_blank(p)
+
+    def spread_pages(self):
+        """다음 쪽으로 이어지는데 아래 끝선이 애매하게 빈 쪽(SPREAD_GAP 넘게)은 그 쪽 모든 문단(빈 줄 포함)의 줄 간격을
+        같은 만큼씩 5%p 단계로(SPREAD_ADD까지, LINE_CAP 넘지 않게) 늘려 빈 곳을 줄인다 — 제목·○·- 사이 차이는 그대로
+        (사용자 수정본 2026-11-01: 한 쪽은 ○ 150→170·제목 160→180, 다른 쪽은 +10 — '하단 끝선이 애매하면 페이지 줄간을
+        전체로 넓혀도 괜찮다'). 참고 앞 마지막 본문 쪽은 그대로 둔다. 어느 문단이라도 쪽이 바뀌면 그 앞 단계에서 멈춘다."""
+        paras = self.paras()
+        heads = self.heads()
+        lim = self.body_h - SAFETY
+        base, used = self.lay.paginate(paras, self.body_w, lim, heads, BLOCK_GAP)
+        done = []
+        for k in range(len(used)):
+            nxt = next((i for i, (s, _) in enumerate(base) if s == k + 1), None)
+            if nxt is None or self._is_ref_head(paras[nxt]):
+                self._restore_lines(k, paras, heads, base, lim, done)  # 마지막 본문 쪽은 넓히지 않고 줄인 것만 되돌림
+                continue
+            if lim - used[k] < self.body_h * SPREAD_GAP:
+                continue
+            if k == 0 and cover_end(paras) is not None:
+                continue  # 표지는 fit_cover가 맡음
+            if any(self._is_ref_head(p) for i, p in enumerate(paras) if base[i][0] <= k):
+                continue  # 참고 쪽은 fit_refs가 맡음
+            # 줄 간격 140% 이상인 글·빈 줄만 — 날짜 줄(100%)·좁힌 빈 줄처럼 일부러 촘촘히 둔 줄은 건드리지 않는다
+            texts = [p for i, p in enumerate(paras) if base[i] == (k, k) and not para_tables(p)
+                     and self.st.para.get(p.get("paraPrIDRef"), {}).get("line_type") == "PERCENT"
+                     and self.min_line <= self.st.para.get(p.get("paraPrIDRef"), {}).get("line", 0) < self.line_cap]
+            # (상한에 닿은 줄은 늘릴 수 없음 — 계획 line_pct로 정한 줄만 있는 쪽에 '줄 간격 +20'이라고 알리던 것)
+            saved = {p: p.get("paraPrIDRef") for p in texts}
+
+            def line_add(d):
+                for p in texts:
+                    pid = saved[p]
+                    cur = self.st.para.get(pid, {}).get("line", 0)
+                    v = max(cur, min(self.line_cap, cur + d))  # 상한은 높일 때만 — 견본의 250% 제목 줄을 190%로 깎지 않음(평가 2026-11-09)
+                    p.set("paraPrIDRef", self.b.hedit.para_line(pid, v) if d and v != cur else pid)
+
+            best = 0
+            for d in range(5, SPREAD_ADD + 1, 5) if texts else ():
+                line_add(d)
+                where, u = self.lay.paginate(paras, self.body_w, lim, heads, BLOCK_GAP)
+                if where != base or u[k] > lim:
+                    break
+                best = d
+            line_add(best)
+            if best:
+                done.append(f"{k + 1}쪽 줄 간격 +{best}")
+            # 줄 간격으로 다 못 채운 쪽(표가 대부분인 쪽)은 그 쪽에 다 들어간 표의 줄 높이를 늘린다(참고 쪽 채우기와 같은 방법)
+            _, u = self.lay.paginate(paras, self.body_w, lim, heads, BLOCK_GAP)
+            tbls = [t for i, p in enumerate(paras) if base[i] == (k, k) for t in para_tables(p) if self._is_data_table(t)]
+            if lim - u[k] < self.body_h * 0.10 or not tbls:
+                continue
+            rows0 = {t: self._row_heights(t) for t in tbls}
+            add = min((lim - u[k]) / sum(len(h) for h in rows0.values()), ROW_ADD_MAX)
+            while add > 0.3 * HWPUNIT_PER_MM:
+                for t in tbls:
+                    self._set_rows(t, [h + add for h in rows0[t]])
+                where, u2 = self.lay.paginate(paras, self.body_w, lim, heads, BLOCK_GAP)
+                if where == base and u2[k] <= lim:
+                    done.append(f"{k + 1}쪽 표 줄 높이 +{add / HWPUNIT_PER_MM:.1f}mm")
+                    break
+                add *= 0.8
+            else:
+                for t in tbls:
+                    self._set_rows(t, rows0[t])
+        back = [d for d in done if d.endswith("되돌림")]
+        done = [d for d in done if not d.endswith("되돌림")]
+        if done:
+            self.notes.append("아래 끝선이 애매하게 빈 쪽은 그 쪽 줄 간격을 통째로 같은 만큼(표가 많은 쪽은 표 줄 높이) 늘려 빈 곳을 줄였습니다("
+                              + ", ".join(done) + ").")
+        if back:
+            self.notes.append("자리가 남는 마지막 본문 쪽은 쪽 맞춤이 줄인 줄 간격을 앞 쪽과 같은 값으로 되돌렸습니다(" + ", ".join(back) + ").")
+
+    def _restore_lines(self, k, paras, heads, base, lim, done):
+        """마지막 본문 쪽(다음이 참고이거나 문서 끝)에서 쪽 맞춤(fit_pages)이 줄인 줄 간격을 본래 값까지 5%p씩 되돌린다 — 쪽이
+        바뀌지 않는 데까지(사용자 2026-11-18 고친 판: 새 쪽에서 시작해 3분의 1만 쓰는 '□ 조치계획' 쪽이 □ 160·○ 150·※ 140%로
+        줄어 있던 것을 앞 장과 같은 □ 180·○ 170%로). 넓히기(spread_pages)는 이 쪽에 하지 않는다 — 본래 값을 넘기지 않음."""
+        orig = getattr(self, "line_orig", {})
+        if any(self._is_ref_head(p) for i, p in enumerate(paras) if base[i][0] <= k):
+            return  # 참고 쪽은 fit_refs가 맡음
+        if k == 0 and cover_end(paras) is not None:
+            return
+
+        def line(pid):
+            return self.st.para.get(pid, {}).get("line", 0)
+
+        # 되돌릴 값: 본래 값, 앞 쪽에서 같은 모양 문단을 넓혔으면(spread_pages) 그 값까지 — 쪽마다 줄 간격이 달라 보이지 않게
+        # (고친 판은 1쪽과 같게 □ 180·○ 170%). 상한 LINE_CAP
+        peer = {}
+        for i, p in enumerate(paras):
+            if p in orig and base[i][0] != k:
+                peer[orig[p]] = max(peer.get(orig[p], 0), line(p.get("paraPrIDRef")))
+        want = {p: min(self.line_cap, max(line(orig[p]), peer.get(orig[p], 0))) for p in orig}
+        texts = [p for i, p in enumerate(paras) if base[i] == (k, k) and p in orig and line(p.get("paraPrIDRef")) < want[p]]
+        if not texts:
+            return
+        saved = {p: p.get("paraPrIDRef") for p in texts}
+
+        def up(d):
+            for p in texts:
+                cur = line(saved[p])
+                v = min(want[p], cur + d)
+                p.set("paraPrIDRef", orig[p] if v == line(orig[p]) else self.b.hedit.para_line(saved[p], v) if v != cur else saved[p])
+
+        best = 0
+        for d in range(5, max(want[p] - line(saved[p]) for p in texts) + 1, 5):
+            up(d)
+            where, u = self.lay.paginate(paras, self.body_w, lim, heads, BLOCK_GAP)
+            if where != base or u[k] > lim:
+                break
+            best = d
+        up(best)
+        if best:
+            done.append(f"{k + 1}쪽 줄 간격 +{best} 되돌림")
+
+    # ------------------------------------------------------------ 참고 쪽 채우기
+    def _is_ref_head(self, p):
+        """참고 머리표: 한 줄짜리 여러 칸 표로 첫 칸이 '참고1'·'붙임' 등."""
+        tables = para_tables(p)
+        if not tables or tables[0].get("rowCnt") != "1" or tables[0].get("colCnt") == "1":
+            return False
+        grid = table_grid(tables[0])
+        return bool(grid) and bool(REF_RE.match(" ".join(para_text(cp) for cp in cell_paras(grid[0][4]))))
+
+    def _set_rows(self, tbl, heights):
+        """줄마다 최소 높이(HWPUNIT)를 칸 높이로 적는다(세로로 합친 칸은 덮은 줄 높이의 합). 한글은 글이 더 길면 늘림."""
+        grid = table_grid(tbl)
+        heights = list(heights)
+        for r, c, rs, cs, tc in grid:  # 배경 그림 줄은 높이를 바꾸지 않는다(가로세로 비율 유지)
+            if rs == 1 and tc in self.b.image_cells:
+                heights[r] = int(tc.find(T("hp:cellSz")).get("height", "0"))
+        for r, c, rs, cs, tc in grid:
+            tc.find(T("hp:cellSz")).set("height", str(int(round(sum(heights[r:r + rs])))))
+        tbl.find(T("hp:sz")).set("height", str(int(round(sum(heights)))))
+
+    def _row_heights(self, tbl):
+        hs = self.lay.table_rows(tbl)
+        om = tbl.find(T("hp:outMargin"))
+        if om is not None:
+            hs[-1] -= int(om.get("top", "0")) + int(om.get("bottom", "0"))
+        return hs
+
+    def _table_group(self, paras, i, with_head=False):
+        """표 문단 i와 한 몸인 문단 번호들: 바로 위 기준·단위·■ 제목 줄(with_head면 그 위 참고 머리표까지) + 바로 아래 ※·* 줄."""
+        group = [i]
+        k = i - 1
+        while k >= 0 and not para_tables(paras[k]) and (UNIT_RE.match(para_text(paras[k]))
+                                                        or para_text(paras[k]).lstrip().startswith("■")):
+            group.insert(0, k)
+            k -= 1
+        if with_head and k >= 0 and self._is_ref_head(paras[k]):
+            group.insert(0, k)
+        k = i + 1
+        while k < len(paras) and not para_tables(paras[k]) and para_text(paras[k]).lstrip().startswith(("※", "*")):
+            group.append(k)
+            k += 1
+        return group
+
+    def _page_fonts(self):
+        """줄 높이를 글자 높이 + ROW_TIGHT까지 줄여도 한 장보다 긴 자료 표는 표 글자를 1pt씩(TABLE_MIN_PT까지) 줄여 한 장에
+        들어가는 가장 큰 크기를 page_shrink에 적는다(사용자 원칙 2026-11-05 '표 안의 글씨는 본문보다 3포인트 작다 … 표를
+        한장에 넣기위해 줄이는 경우말고는 유지'). 참고 쪽 표는 참고 머리표와 함께 잰다. 줄여도 안 들어가면 그대로(쪽 경계에서
+        줄 사이로 나뉨). 칸 너비는 지금 것으로 재므로(작은 글자에 맞춰 다시 나누면 더 줄어듦) 조심하는 쪽이다. 줄인 표 수."""
+        paras = self.paras()
+        lim = self.body_h - SAFETY
+        self.page_shrink = getattr(self, "page_shrink", {})
+        found = []
+        for i, p in enumerate(paras):
+            tbls = [t for t in para_tables(p) if self._is_data_table(t)]
+            if not tbls or self._is_ref_head(p):
+                continue
+            tbl = tbls[0]
+            group = self._table_group(paras, i, with_head=True)
+            base = self._row_heights(tbl)
+            runs = [(r, r.get("charPrIDRef")) for r in self._table_runs(tbl)]
+            size = self._main_size(tbl)
+
+            def tight_height():
+                self._set_rows(tbl, [1] * len(base))
+                main = self._main_size(tbl)  # 표마다 한 번만(줄마다 재면 줄 수 제곱으로 늚 — 8×300 표 29초 중 19.6초, 평가 2026-11-09)
+                floor = [max(n, main * 100 + ROW_TIGHT) for n in self._row_heights(tbl)]
+                self._set_rows(tbl, floor)
+                return sum(self.lay.para_height(paras[g], self.body_w)[0] for g in group)
+
+            if tight_height() <= lim:
+                self._set_rows(tbl, base)
+                continue
+            pick = 0
+            for d in range(1, size - TABLE_MIN_PT + 1):
+                for r, cid in runs:
+                    r.set("charPrIDRef", self.b.hedit.char_size(cid, -d))
+                if tight_height() <= lim:
+                    pick = d
+                    break
+            for r, cid in runs:
+                r.set("charPrIDRef", cid)
+            self._set_rows(tbl, base)
+            if pick:
+                self.page_shrink[tbl] = self.page_shrink.get(tbl, 0) + pick
+                found.append(f"{size}→{size - pick}pt")
+        if found:
+            self.notes.append(f"줄 높이를 줄여도 한 장보다 긴 표 {len(found)}개는 한 장에 들어가게 표 글자를 줄였습니다("
+                              + ", ".join(sorted(set(found))) + " — ■ 제목·단위 줄·※도 함께, 사용자 원칙 '한 장에 넣을 때만 줄임').")
+        return len(found)
+
+    def fit_long_tables(self, again=False):
+        """한 쪽을 조금 넘는 본문 표는 줄 높이를 줄여 한 쪽에 넣는다(사용자 원칙 2026-11-04 — '큰 표가 두 장에 걸치면 차라리
+        밑으로 내려서 한 장에 딱 들어가게', '세부사업 예산 현황 행의 줄간격을 줄여야'). 표 + 바로 위 기준·단위·■ 제목 줄 +
+        바로 아래 ※·* 줄의 높이가 쪽 높이를 넘으면, 줄마다 같은 만큼(글자 높이 + ROW_TIGHT 밑으로는 안 내림) 줄여 들어가는
+        가장 작은 만큼만 줄인다. 그래도 안 들어가는 긴 표는 그대로(쪽 경계에서 줄 사이로 나뉨). 그러면 쪽 맞춤이 묶음째 다음 쪽으로
+        넘긴다(layout.paginate). 참고 쪽은 fit_refs가 따로 맞춘다. 줄인 표 수.
+        줄 높이만으로 안 들어가는 표는 글자를 줄여 본다(_page_fonts — 사용자 2026-11-05 '표를 한장에 넣기위해 줄이는 경우')."""
+        if not again and self._page_fonts():
+            self.fit_tables(again=True)  # 줄인 글자에 맞춰 칸 너비·■ 제목·단위 줄·※를 다시(되풀이해도 같게 두 번)
+            self.fit_tables(again=True)
+        paras = self.paras()
+        lim = self.body_h - SAFETY
+        stop = next((i for i, p in enumerate(paras) if self._is_ref_head(p)), len(paras))
+        done = []
+        for i, p in enumerate(paras[:stop]):
+            tbls = [t for t in para_tables(p) if self._is_data_table(t)]
+            if not tbls:
+                continue
+            tbl = tbls[0]
+            group = [i]
+            k = i - 1
+            while k >= 0 and not para_tables(paras[k]) and (UNIT_RE.match(para_text(paras[k]))
+                                                            or para_text(paras[k]).lstrip().startswith("■")):
+                group.insert(0, k)
+                k -= 1
+            k = i + 1
+            while k < len(paras) and not para_tables(paras[k]) and para_text(paras[k]).lstrip().startswith(("※", "*")):
+                group.append(k)
+                k += 1
+
+            def height():
+                return sum(self.lay.para_height(paras[g], self.body_w)[0] for g in group)
+
+            if height() <= lim:
+                continue
+            base = self._row_heights(tbl)
+            self._set_rows(tbl, [1] * len(base))  # 칸 높이를 아주 작게 두면 글이 차지하는 높이만 남음
+            need = self._row_heights(tbl)
+            main = self._main_size(tbl)
+            floor = [max(n, main * 100 + ROW_TIGHT) for n in need]
+            room = max((b - f for b, f in zip(base, floor)), default=0)
+
+            def rows(d):
+                return [max(f, b - d) for b, f in zip(base, floor)]
+
+            self._set_rows(tbl, rows(room))
+            if room <= 0 or height() > lim:
+                self._set_rows(tbl, base)  # 줄여도 한 쪽보다 긴 표 — 그대로 두고 나눔
+                continue
+            lo, hi = 0.0, float(room)
+            for _ in range(20):
+                mid = (lo + hi) / 2
+                self._set_rows(tbl, rows(mid))
+                if height() <= lim:
+                    hi = mid
+                else:
+                    lo = mid
+            self._set_rows(tbl, rows(hi))
+            done.append(hi / HWPUNIT_PER_MM)
+        if done:
+            self.notes.append(f"한 쪽을 조금 넘던 표 {len(done)}개는 줄 높이를 줄여(줄마다 {f'{min(done):.1f}mm' if f'{min(done):.1f}' == f'{max(done):.1f}' else f'{min(done):.1f}~{max(done):.1f}mm'}) 한 쪽에 "
+                              "들어가게 했습니다(두 쪽에 나뉘지 않고 제목·단위 줄과 함께 다음 쪽에서 시작).")
+        return len(done)
+
+    def _block_height(self, ps, lim):
+        """문단 묶음만 따로 쪽을 나눠 본 (쪽 수, 마지막 쪽 높이)."""
+        _, used = self.lay.paginate(ps, self.body_w, lim)
+        return len(used), used[-1]
+
+    def _stretch_rows(self, tbls, seg, lim):
+        """seg(첫 문단이 쪽 맨 위에서 시작하는 문단들)의 마지막 쪽 남는 높이를 tbls 표의 줄마다 똑같이 나눠 더한다
+        (줄마다 ROW_ADD_MAX까지). 쪽 수가 바뀌면 조금씩 덜 더하고, 끝내 안 되면 되돌린다. 더했으면 True."""
+        if not tbls:
+            return False
+        base = {t: self._row_heights(t) for t in tbls}
+        rows = sum(len(h) for h in base.values())
+        npg, used = self._block_height(seg, lim)
+        add = min((lim - used) / rows, ROW_ADD_MAX)
+        while add > 0.3 * HWPUNIT_PER_MM:
+            for t in tbls:
+                self._set_rows(t, [h + add for h in base[t]])
+            if self._block_height(seg, lim)[0] == npg:
+                self._last_add = add
+                return True
+            add *= 0.8
+        for t in tbls:
+            self._set_rows(t, base[t])
+        return False
+
+    def fit_refs(self):
+        """참고 쪽(참고 머리표부터 끝까지)은 가급적 한 장에 꽉 채우고, 작은 표는 두 개를 한 장에(사용자 원칙 2026-11-01).
+        1) 참고 표 줄 높이를 글에 맞춰 줄인다(글자 높이 + 2.5mm까지) — 한 장에 들어갈 여지를 만든다.
+        2) 참고 머리표·□ 제목에서 시작하는 덩어리(제목 + 표 + ※)를 차례로 쪽에 담는다: 앞 덩어리와 한 쪽에 다 들어가면
+           쪽 나눔을 빼고 빈 줄 하나를 두어 이어 붙이고(참고가 달라도), 안 들어가면 새 쪽에서 시작한다.
+        3) 덩어리가 다 들어간 쪽은 남는 높이를 그 쪽 표의 줄마다 똑같이 나눠 더해(줄마다 5mm까지) 쪽을 채운다.
+        자료 표가 없어도(조문 상자 + 글만인 참고) 2)는 한다 — 1)·3)만 표가 있을 때(사용자 2026-11-10 '참고 2개가 한 페이지에 들어가면
+        한 페이지에 두 개 다 넣어도 된다'). 계획의 참고 머리표 page_break보다 앞선다."""
+        paras = self.paras()
+        start = next((i for i, p in enumerate(paras) if self._is_ref_head(p)), None)
+        if start is None:
+            return
+        region = paras[start:]
+        lim = self.body_h - SAFETY - FILL_MARGIN
+        heads = [i for i, p in enumerate(region)  # ■ 표 제목은 □와 같은 수준 1이지만 표와 한 몸 — 덩어리 머리가 아님
+                 if self._is_ref_head(p) or (not para_tables(p) and marker_level(para_text(p)) == 1 and not is_table_title(p))]
+        if not heads or heads[0] != 0:
+            heads = [0] + heads
+        chunks = []
+        for k, h in enumerate(heads):
+            ps = region[h:heads[k + 1] if k + 1 < len(heads) else len(region)]
+            if chunks and chunks[-1]["open"]:  # 제목만 있는 덩어리(참고 머리표 바로 뒤 □ 등)는 다음 덩어리와 한 몸
+                chunks[-1]["ps"] += ps
+            else:
+                chunks.append({"ps": list(ps)})
+            content = [p for p in chunks[-1]["ps"] if not self._blank(p)]
+            chunks[-1]["open"] = all(self._is_ref_head(p) or (not para_tables(p) and marker_level(para_text(p)) == 1
+                                                              and not is_table_title(p)) for p in content)
+        for ch in chunks:
+            body = list(ch["ps"])
+            tail = []
+            while len(body) > 1 and self._blank(body[-1]):
+                tail.insert(0, body.pop())
+            ch["body"], ch["tail"] = body, tail
+        tables = [t for p in region for t in para_tables(p) if self._is_data_table(t)]  # 없어도 2) 쪽에 담기는 함
+        heads_set = {ch["body"][0] for ch in chunks}
+        for p in region:  # 덩어리 안에 force_breaks가 넣은 쪽 나눔은 다시 정한다
+            if p in self.forced and p not in heads_set:
+                p.set("pageBreak", "0")
+                self.forced.discard(p)
+        for t in tables:  # 1) 줄 높이 줄이기
+            self._set_rows(t, [self._main_size(t) * 100 + ROW_PAD] * int(t.get("rowCnt", "1")))
+        sp = self.b._block_spacer()
+        sp_h = self.lay.para_height(self.b.protos[sp], self.body_w)[0] if sp is not None else 0
+        sizes = [self._block_height(ch["body"], lim) for ch in chunks]
+
+        def gap_before(k):
+            prev_tail = chunks[k - 1]["tail"]
+            return sum(self.lay.para_height(b, self.body_w)[0] for b in prev_tail) if prev_tail else sp_h
+
+        def whole_ref_fits(k, y):
+            """참고 머리표로 시작하는 덩어리 k: 그 참고 전체(다음 참고 머리표 앞까지)가 지금 쪽에 다 들어가는가 — 참고 하나가
+            앞 쪽 끝과 다음 쪽으로 갈라지지 않게(사용자 2026-11-10 '참고 2개가 한 페이지에 들어가면 한 페이지에')."""
+            for j in range(k, len(chunks)):
+                if j > k and self._is_ref_head(chunks[j]["body"][0]):
+                    break
+                if sizes[j][0] != 1:
+                    return False
+                y += gap_before(j) + sizes[j][1]
+                if y > lim:
+                    return False
+            return True
+
+        pages = []  # 2) 쪽에 담기
+        for k, ch in enumerate(chunks):
+            npg, last = sizes[k]
+            if npg == 1 and pages:
+                gap = gap_before(k)
+                if self._is_ref_head(ch["body"][0]) and (not pages[-1]["ref_top"] or not whole_ref_fits(k, pages[-1]["y"])):
+                    # 새 참고는 새 쪽에서 — 모으는 것은 앞 참고가 그 쪽 맨 위에서 시작한 쪽에, 다 들어갈 때만(사용자 2026-11-18:
+                    # 고친 판은 두 쪽에 걸친 참고1 끝 쪽 아래에 붙던 참고2를 새 쪽으로, 짧은 참고2·3은 한 쪽에 — 물음 '새 쪽, 짧은 것은 모음')
+                    pass
+                elif pages[-1]["y"] + gap + last <= lim:
+                    pages[-1]["chunks"].append(k)
+                    pages[-1]["y"] += gap + last
+                    continue
+            pages.append({"chunks": [k], "y": last, "split": npg > 1,
+                          "ref_top": npg == 1 and self._is_ref_head(ch["body"][0])})
+        joined = []
+        for pi, pg in enumerate(pages):
+            for j, k in enumerate(pg["chunks"]):
+                head = chunks[k]["body"][0]
+                if j == 0:
+                    if pi > 0 or k > 0:
+                        head.set("pageBreak", "1")
+                        for b in chunks[k - 1]["tail"]:  # 쪽 나눔 바로 앞 빈 줄은 앞 쪽 끝에 남을 뿐이라 뺀다
+                            if b.getparent() is not None:
+                                b.getparent().remove(b)
+                    continue
+                moved = head.get("pageBreak") == "1" or head in self.forced  # 쪽 나눔을 빼서 앞 쪽으로 올린 덩어리만 알림
+                head.set("pageBreak", "0")
+                self.forced.discard(head)
+                if not chunks[k - 1]["tail"] and sp is not None:
+                    head.addprevious(self.b.clone(sp, "참고 쪽 빈 줄"))
+                if not moved:
+                    continue
+                if self._is_ref_head(head):
+                    name = para_text(cell_paras(table_grid(para_tables(head)[0])[0][4])[0]).strip()
+                else:
+                    name = para_text(head).strip()[:10]
+                joined.append(name)
+        filled = []
+        allp = self.paras()
+        for pi, pg in enumerate(pages):  # 3) 남는 높이를 표 줄에 나눠 쪽 채우기
+            # 앞 쪽에서 넘어온 긴 표(여러 쪽 덩어리)의 꼬리가 있는 쪽은 이 쪽에 다 들어간 덩어리의 표만 늘린다
+            own = pg["chunks"][1:] if pg["split"] else pg["chunks"]
+            tbls = [t for k in own for p in chunks[k]["body"] for t in para_tables(p) if self._is_data_table(t)]
+            if not tbls:
+                continue
+            first = chunks[pg["chunks"][0]]["body"][0]
+            last_p = chunks[pg["chunks"][-1]]["body"][-1]
+            seg = allp[allp.index(first):allp.index(last_p) + 1]
+            if self._stretch_rows(tbls, seg, lim):
+                filled.append(f"{pi + 1}번째 참고 쪽 +{self._last_add / HWPUNIT_PER_MM:.1f}mm")
+        msg = []
+        if joined:
+            msg.append(f"참고 덩어리 {len(joined)}개는 앞 덩어리와 한 쪽에 들어가 모았습니다("
+                       + ", ".join(f"‘{t}’" for t in joined) + ")")
+        if filled:
+            msg.append("참고 쪽은 표 줄 높이를 글에 맞춘 뒤 남는 높이를 줄마다 나눠 쪽을 채웠습니다(" + ", ".join(filled) + ")")
+        if msg:
+            self.notes.append("; ".join(msg) + ".")
