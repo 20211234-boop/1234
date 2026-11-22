@@ -1,0 +1,1818 @@
+# -*- coding: utf-8 -*-
+"""사용자 원칙(Builder의 일부): 묶음 유지·줄 바꿈, 괄호 이름표 폭, 쌍점·이름표 내어쓰기, □·■ 제목, 항목 수·근거법령·표 제목 검사, 설명글·괄호 작게, 따옴표 붙이기, 번호·빈 줄·단위 줄, 근거법령 1번."""
+from build_base import *  # noqa: F401,F403 — 상수·공통 함수·BuildError
+from hwpx_lib import _base_head  # noqa: E402,F401 — 밑줄 이름은 *로 안 넘어옴
+from fit_base import CASE_LINE, DATE_HEAD_RE, LAW_ARTICLE_GAP, LAW_LINE, LAW_NAME_GAP  # noqa: E402 — 참고 근거법령 줄 간격·위 여백(쪽 맞춤과 같은 값)
+
+
+class RulesPart:
+    # ------------------------------------------------------------ 사용자 원칙(줄 나눔·묶음)
+    def keep_groups(self, out):
+        """□는 바로 아래와 함께, ○와 그 아래 -·*·※·표는 한 쪽에 붙어 있게(다음 문단과 함께)."""
+        def lv(k):
+            p = out[k]
+            tables = para_tables(p)
+            if tables:
+                return "T1" if tables[0].get("rowCnt") == "1" else "T"
+            t = para_text(p)
+            if UNIT_RE.match(t) or is_table_title(p, out[k + 1:k + 5]):
+                return "U"  # 표 위 ■ 제목·기준·단위 줄: 위 항목·아래 표와 한 쪽에
+            return "blank" if not t.strip() else marker_level(t)
+
+        lv_list = [lv(k) for k in range(len(out))]
+        member = (3, 4, "T", "T1", "U")
+        for i in range(len(out) - 1):
+            a, b = lv_list[i], lv_list[i + 1]
+            c = lv_list[i + 2] if i + 2 < len(lv_list) else None
+            if out[i + 1].get("pageBreak") == "1":
+                continue
+            keep = ((a == 1 and b not in ("blank", 0))
+                    or (a in (2, 3, 4, "T", "T1", "U") and b in member)
+                    or (a == "T1" and b in (1, 2))
+                    # 표 앞에 둔 빈 줄은 묶음을 끊지 않는다: ○ → (빈 줄) → 표
+                    or (a in (1, 2, 3, 4, "T", "T1") and b == "blank" and c in member)
+                    or (a == "blank" and b in ("T", "T1") and i > 0 and lv_list[i - 1] in (1, 2, 3, 4, "T", "T1"))
+                    # ○ 제목 → (빈 줄) → 아랫문단도 끊지 않는다 — 의뢰서 '○ 질의사항 1' 밑 빈 줄에서 묶음이 끊겨 질의 제목만 쪽 끝에
+                    # 홀로 남던 것(2026-11-22 사용자 문서로 다시 만들어 봄)
+                    or (a == "blank" and b in member and i > 0 and lv_list[i - 1] == 2))
+            if keep:
+                out[i].set("paraPrIDRef", self.hedit.para_keep_next(out[i].get("paraPrIDRef")))
+                if a == 2 and getattr(self, "narrative", ""):  # 서술식 문서의 ○ 제목(질의사항 등)은 두 쪽에 갈라지지 않게
+                    out[i].set("paraPrIDRef", self.hedit.para_keep_lines(out[i].get("paraPrIDRef")))
+
+    def word_wrap(self):
+        """쓰는 문단 모양을 모두 어절(단어) 단위 줄 나눔으로 맞춘다."""
+        changed = 0
+        for pid in {el.get("paraPrIDRef") for el in self.sec.iter() if el.get("paraPrIDRef")}:
+            changed += self.hedit.word_wrap(pid)
+        if changed:
+            self.warn(f"글자 단위로 줄을 나누던 문단 모양 {changed}개를 단어 단위로 바꿨습니다.")
+
+    # ------------------------------------------------------------ 한 블록
+    def make_block(self, n, block):
+        where = f"블록 {block.get('_src', '(자동 빈 줄)')}" if isinstance(block, dict) else f"블록 {n + 1}"
+        if not isinstance(block, dict) or "like" not in block:
+            raise BuildError(f"{where}: 블록마다 \"like\"(견본 문단 번호)가 있어야 합니다: {block!r}")
+        known = {"like", "text", "runs", "table", "cells", "page_break", "marker", "header_rows", "body_like",
+                 "last_like", "keep_header", "cols", "widths", "note", "unit", "_src", "_align", "flow", "arrow",
+                 "title", "rows", "_case"}
+        if ("title" in block or "rows" in block) and "flow" not in block:
+            raise BuildError(f"{where}: title은 표·도표 블록에만(표는 위 ■ 제목 줄, 도표는 < 제목 >), rows는 도표(flow) 블록에만 씁니다.")
+        extra = set(block) - known
+        if extra:
+            raise BuildError(f"{where}: 모르는 항목 {sorted(extra)}. 쓸 수 있는 항목: {sorted(known)}")
+        idx = block["like"]
+        p = self.clone(idx, where)
+        if para_tables(p):
+            if "runs" in block:
+                raise BuildError(f"{where}: 표 문단에는 runs를 쓸 수 없습니다. table·cells·text를 쓰세요.")
+            self.fill_table(p, block, where)
+        else:
+            if "table" in block or "cells" in block or "flow" in block:
+                raise BuildError(f"{where}: like {idx}는 표가 아닌 문단입니다. 표가 든 문단 번호를 고르세요.")
+            if "runs" in block:
+                self.fill_runs(p, block["runs"], idx, where)
+            elif "text" in block:
+                self.fill_text(p, block["text"], where, marker=block.get("marker", True))
+        if para_tables(p) and ("table" in block or "flow" in block):
+            self.data_tbls.update(para_tables(p))  # 계획이 줄·칸을 준 표 — 나머지 표는 견본(양식) 표(만든 문서 표시 form)
+        if "page_break" in block:
+            p.set("pageBreak", "1" if block["page_break"] else "0")
+        if block.get("_align"):
+            p.set("paraPrIDRef", self.hedit.para_align(p.get("paraPrIDRef"), block["_align"]))
+        return p
+
+    # ------------------------------------------------------------ 괄호 이름표 맞추기
+    def sample_ways(self):
+        """올린 견본이 2-1 '늘 지키는 것'과 다르게 둔 모양·자리(따르는 차례 요청 → 견본 → 원칙, 사용자 2026-11-15 '모양·자리는 모두
+        견본'): 'basis' — 근거를 첫 □(Ⅰ.)가 아닌 곳(다른 □ 안 ○ (근거) 등)에 둠, 'counts' — □ 아래 ○·○ 아래 -가 하나뿐이거나 다섯을
+        넘는 곳이 있음. 기본 양식이면 빈 묶음(원칙대로). 요약 상자는 견본에 없으면 계획에도 없으니 따로 보지 않는다."""
+        from plan_text import _is_bundled_basic
+        ways = set()
+        if _is_bundled_basic(self.pkg):
+            return ways
+        rows = []
+        for p in self.protos:
+            if para_tables(p):
+                if self._is_ref_head(p):
+                    break  # 참고 쪽은 보지 않음
+                continue
+            t = para_text(p)
+            if t.strip():
+                _, mk, body = split_marker(t)
+                lv = marker_level(t)
+                if lv == 3 and mk.strip()[:1] in "•∙·ㆍ":
+                    lv = 4  # 작대기 다음은 가운데점(lone_dashes와 같은 수준 — Codex 검토)
+                rows.append((lv, re.sub(r"[⎵⍽\s]", "", body.replace("**", ""))))  # 벌린 이름표 (근    거)도
+        heads = [i for i, (lv, _) in enumerate(rows) if lv == 1]
+        basis = [i for i, (lv, b) in enumerate(rows) if lv in (1, 2) and re.match(r"\(?\s*(추진\s*)?근\s*거", b)]
+        if heads and basis and heads[0] not in basis:
+            first_items = [i for i in range(heads[0] + 1, heads[1] if len(heads) > 1 else len(rows)) if rows[i][0] == 2]
+            if not (first_items and first_items[0] in basis and BASIS_LAW_TITLE_RE.match(rows[heads[0]][1])):
+                ways.add("basis")
+        for parent in (1, 2, 3):
+            n, open_ = [], None
+            for lv, _ in rows + [(0, "")]:
+                if lv and lv <= parent or lv == 0:
+                    if open_ is not None:
+                        n.append(open_)
+                    open_ = 0 if lv == parent else None
+                elif lv == parent + 1 and open_ is not None:
+                    open_ += 1
+            if any(k == 1 or k > 5 for k in n):
+                ways.add("counts")
+        return ways
+
+    def omit_dots(self, blocks):
+        """괄호 생략 표시 (중략)·(전략)·(후략)·(생략)을 중점 세 개 ···로(사용자 2026-11-15 '중략 전략 후략은 괄호로 하지말고
+        앞이나 뒤 중점 각 세개씩으로 표현하죠'). 글·칸 글·조각 글 모두, 둘레 빈칸은 쓴 그대로. 옮겨 쓰기처럼 글을 그대로 둘 때는
+        계획에 "omit_dots": false."""
+        n = 0
+
+        def fix(s):
+            nonlocal n
+            if not isinstance(s, str):
+                return s
+            s2, k = OMIT_MARK_RE.subn(OMIT_DOTS, s)
+            n += k
+            return s2
+
+        for i, b in enumerate(blocks):
+            if not isinstance(b, dict):
+                continue
+            if "text" in b:
+                b["text"] = fix(b["text"])
+            if isinstance(b.get("cells"), dict):
+                b["cells"] = {k: ([fix(x) for x in v] if isinstance(v, list) else fix(v)) for k, v in b["cells"].items()}
+            if isinstance(b.get("runs"), list):
+                b["runs"] = [[fix(x[0]), x[1]] if isinstance(x, list) and len(x) == 2 else x for x in b["runs"]]
+            for key in ("rows", "table"):  # 표 블록은 "table": [[칸, …], …](Codex 검토 — 옛 판은 "rows"만 봐서 남았음)
+                if isinstance(b.get(key), list):
+                    b[key] = [[fix(c) for c in r] if isinstance(r, list) else fix(r) for r in b[key]]
+        if n:
+            self.warn(f"괄호 생략 표시 {n}곳을 중점 세 개(···)로 바꿨습니다(생략은 ··· — 사용자 원칙).")
+
+    def align_labels(self, blocks):
+        """○(또는 -) 항목에 붙은 괄호 이름표 (현황)·(문제점)을 네 글자 폭에 맞춘다(네 글자가 기준).
+        (현황)은 (현⎵⎵⎵⎵⎵⎵⎵⎵황)처럼 고정폭 빈칸을 넣어, 괄호 다음 내용이 위아래로 같은 자리에서 시작하게 한다.
+        보통 빈칸은 양쪽 정렬 때 늘어나므로 이름표 안·뒤 빈칸은 모두 고정폭 빈칸(⎵, 반 글자)으로 쓴다."""
+        groups, current = [], {}
+
+        def close(levels):
+            for lv in sorted(levels):
+                if lv in current:
+                    groups.append(current.pop(lv))
+
+        for n, b in enumerate(blocks):
+            if not isinstance(b, dict) or not isinstance(b.get("like"), int) or not 0 <= b["like"] < len(self.protos):
+                continue
+            if b.get("_case"):  # 판례·해석례 발췌의 (판결요지)·(회신) 등은 인용 이름표 — 글자 그대로(받은 요청 2026-11-22 15번)
+                close(list(current))
+                continue
+            proto = self.protos[b["like"]]
+            if b.get("page_break"):
+                close(list(current))
+            if para_tables(proto) or "text" not in b:
+                if para_tables(proto) or not para_text(proto).strip():
+                    close(list(current))
+                continue
+            lv = marker_level(para_text(proto))
+            if lv == 1:
+                close(list(current))
+                continue
+            if lv not in (2, 3):
+                continue
+            close([x for x in current if x > lv])
+            _, um, body = split_marker(b["text"])
+            body = body if um else b["text"]
+            lm = LABEL_RE.match(body)
+            if lm and fake_label(lm.group("core"), body[lm.end():]):
+                lm = None
+            current.setdefault(lv, []).append((n, lm, body))
+        close(list(current))
+
+        bolded = 0
+        for g in groups:
+            labeled = [(n, m, body) for n, m, body in g if m]
+            if not labeled:
+                continue
+            font = self._body_font(blocks[labeled[0][0]]["like"])
+            k = max(1, round(self.metrics.em(font, " ") / FW_EM))  # 보통 빈칸 하나 = 고정폭 빈칸 k개
+            raw = [m.group("core").strip() for _, m, _ in labeled]
+            # 이름표 끝의 위 첨자 표시(^^*^^)는 폭에 넣지 않고 벌린 뒤 다시 붙임(사용자 2026-11-15 — 표시를 글자로 세고 그 사이를 벌렸음)
+            sups = [re.search(r"\^\^.+?\^\^$", c) for c in raw]
+            cores = [(c[:s.start()] if s else c).replace(" ", FW * k) for c, s in zip(raw, sups)]
+            sups = [s.group(0) if s else "" for s in sups]
+            widths = [self._label_em(c, font) for c in cores]
+            # 네 글자 이름표가 기준: 두세 글자 이름표는 묶음과 상관없이 늘 네 글자 폭에 맞춘다(사용자 결정 2026-10-31).
+            # 네 글자는 붙여 쓰고, 네 글자를 넘는 이름표는 그대로 둔다.
+            target = self._label_em("가가가가", font)
+            for (n, m, body), core, w, sup in zip(labeled, cores, widths, sups):
+                if "^^" not in core:  # 가운데 위 첨자가 낀 이름표는 벌리지 않음(표시가 갈라짐)
+                    core = spread(core, max(0, int(round((target - w) / FW_EM))))
+                core += sup
+                b1, b2 = m.group("b1") or "", m.group("b2") or ""
+                if not b1 and not b2 and self._label_bold(blocks[n]["like"]):
+                    # 견본 문단의 이름표가 굵으면 ** 없이 쓴 이름표도 굵게 — 견본대로(시험 2026-11-12: '(현황)은 그냥 쓴다'를
+                    # 읽고 ** 없이 쓴 이름표 14곳이 보통 글씨로 나왔고 도구는 아무 말이 없었음)
+                    b1 = b2 = "**"
+                    bolded += 1
+                rest = body[m.end():].lstrip(" " + FW)
+                blocks[n] = dict(blocks[n], text=f"{b1}({core}){b2}{FW * k}{rest}")
+        if bolded:
+            self.warn(f"첫머리 괄호 이름표 {bolded}곳을 견본 문단처럼 굵게 넣었습니다(**를 붙이지 않아도 됨).")
+        # 네 글자를 넘는 이름표는 맞춤에서 빠져도 된다(사용자: 네 글자가 기준, 넘는 것은 규칙에서 어긋나도 됨) — 알리지 않음
+        self._cover_labels(blocks)
+
+        # 작대기(-) 항목의 '항목명 : 내용'은 세 글자 폭이 기준(사용자 의견 2026-11-01): '- 교체 : …' → '- 교⎵⎵⎵⎵체 : …'
+        # (세 글자·세 글자를 넘는 항목명은 그대로) → 쌍점과 내용이 위아래로 같은 자리
+        for n, b in enumerate(blocks):
+            if (not isinstance(b, dict) or "text" not in b or not isinstance(b.get("like"), int)
+                    or not 0 <= b["like"] < len(self.protos)):
+                continue
+            proto = self.protos[b["like"]]
+            if para_tables(proto) or marker_level(para_text(proto)) != 3:
+                continue
+            pre, um, body = split_marker(b["text"])
+            m = DASH_HEAD_RE.match(body if um else b["text"])
+            if not m:
+                continue
+            font = self._body_font(b["like"])
+            k = int(round((self._label_em("가가가", font) - self._label_em(m.group("core"), font)) / FW_EM))
+            if k > 0:
+                head = f"{m.group('b1') or ''}{spread(m.group('core'), k)}{m.group('b2') or ''}"
+                blocks[n] = dict(b, text=pre + head + (body if um else b["text"])[m.end():])
+
+    def _cover_labels(self, blocks):
+        """표지 개요 상자의 ○ 줄 두세 글자 이름표도 네 글자 폭으로 — 본문과 같은 규칙(지금까지 정돈 --all만 맞췄음, 평가 2026-11-09)."""
+        if not self.starts_with_cover(blocks):
+            return
+        for n, b in enumerate(blocks):
+            proto = self._proto_of(b)
+            if proto is None:
+                continue
+            if proto.find(".//" + T("hp:secPr")) is not None:
+                break
+            if not para_tables(proto) or not isinstance(b.get("text"), str) or "□" not in b["text"]:
+                continue
+            runs = [r for cp in cell_paras(table_grid(para_tables(proto)[0])[0][4]) for r in indexed_runs(cp)]
+            font = next((self.styles.char.get(r.get("charPrIDRef"), {}).get("font") for r in runs), None)
+            k = max(1, round(self.metrics.em(font, " ") / FW_EM))
+            target = self._label_em("가가가가", font)
+            lines = b["text"].split(NL)
+            for i, line in enumerate(lines):
+                pre, um, body = split_marker(line)
+                m = LABEL_RE.match(body) if um and marker_level(line) == 2 else None
+                if not m:
+                    continue
+                core = m.group("core").strip().replace(" ", FW * k)
+                core = spread(core, max(0, int(round((target - self._label_em(core, font)) / FW_EM))))
+                lines[i] = f"{pre}{m.group('b1') or ''}({core}){m.group('b2') or ''}{FW * k}{body[m.end():].lstrip(' ' + FW)}"
+            blocks[n] = dict(b, text=NL.join(lines))
+
+    def _label_bold(self, idx):
+        """견본 문단 idx의 첫머리 괄호 이름표가 굵은 조각인가."""
+        proto = self.protos[idx]
+        text = para_text(proto)
+        pre, mark, body = split_marker(text)
+        if not LABEL_RE.match(body):
+            return False
+        at, pos = len(pre) if mark else 0, 0
+        for r in indexed_runs(proto):
+            t = run_text(r)
+            if pos <= at < pos + len(t):
+                return self.styles.is_bold(r.get("charPrIDRef"))
+            pos += len(t)
+        return False
+
+    def _body_font(self, idx):
+        runs = indexed_runs(self.protos[idx])
+        fonts = [self.styles.char.get(r.get("charPrIDRef"), {}).get("font") for r in runs]
+        return next((f for f in reversed(fonts) if f), None)
+
+    def _fw_per_space(self, run):
+        font = self.styles.char.get(run.get("charPrIDRef"), {}).get("font")
+        return max(1, round(self.metrics.em(font, " ") / FW_EM))
+
+    def _label_em(self, core, font):
+        return sum(FW_EM if ch == FW else self.metrics.em(font, ch) for ch in core)
+
+    # ------------------------------------------------------------ 쌍점 뒤 맞추기
+    def colon_hang(self, colons=True, labels=True):
+        """두 줄 이상인 문단의 둘째 줄부터를 내용 첫 글자에 맞춰 내어쓴다.
+        - 쌍점: '인센티브 : 밤 10시…' → 쌍점 뒤 첫 글자(사용자 원칙: 쌍점 뒤 처음 시작하는 글자의 끝선에 아랫줄을 맞춤)
+        - 괄호 이름표: '○ (근  거) 「법」…' → 이름표 뒤 첫 글자(사용자 의견 2026-10-31: 근거·홍보 다음 첫 글자에 끝선 맞춤)
+        내어쓰기가 본문 폭의 40%를 넘으면(이름표가 너무 김) 하지 않는다."""
+        lay = Layout(self.styles, self.metrics)
+        pg = page_info(self.sec)
+        body_w = pg["body_width"] * HWPUNIT_PER_MM
+
+        def content_at(text):
+            k = label_colon(text) if colons else 0
+            # 서술형(문장) 글이면 이름표 ')' 뒤가 아니라 '(' 자리(머리 기호 뒤)에 — 개조식만 이름표 뒤(사용자 2026-11-15)
+            return k or (label_content(text) if labels and not is_narrative(text) else 0)
+
+        n_colon = n_label = 0
+        for p in [x for x in self.sec if x.tag == T("hp:p")]:
+            if para_tables(p) or p in self.law_paras:
+                continue
+            text = para_text(p)
+            if marker_level(text) == 1:
+                continue
+            k = content_at(text)
+            if not k:
+                if labels and label_content(text) and is_narrative(text) and not label_colon(text):
+                    self._marker_hang(p, text, lay)  # 서술형: 이름표 '(' 자리(기호 뒤)에 정확히(견본 내어쓰기가 작아도 — Codex 검토)
+                elif not (label_content(text) or label_colon(text)):
+                    self._reset_hang(p, text, lay)
+                continue
+            chs, lines = lay.para_lines(p, body_w)
+            if len(lines) < 2 or sum(c[1] for c in chs[:k]) > body_w * 0.4:
+                continue
+            by_colon = bool(colons and label_colon(text))
+            # 쌍점 뒤 첫 글자까지의 보통 빈칸은 고정폭 빈칸으로(첫 줄이 양쪽 정렬로 늘어나도 위치가 변하지 않게)
+            pos = 0
+            for r in indexed_runs(p):
+                t = run_text(r)
+                start, pos = pos, pos + len(t)
+                if start >= k:
+                    break
+                cut = min(len(t), k - start)
+                new = t[:cut].replace(" ", FW * self._fw_per_space(r)) + t[cut:]
+                if new != t and len(r) == 1:
+                    set_run_text(r, new, self.tab_proto)
+            k = content_at(para_text(p))
+            self._split_run_at(p, k)  # '항목명 : '·'(이름표) '와 내용을 다른 조각으로(내용만 자간 조정되게)
+            chs, lines = lay.para_lines(p, body_w)
+            hang = sum(c[1] for c in chs[:k])
+            text = para_text(p)
+            cur = -self.styles.para.get(p.get("paraPrIDRef"), {}).get("intent", 0)
+            if k < len(chs) and text[k] in "「『" and -0.02 * chs[k][1] <= cur - hang <= 0.5 * chs[k][1]:
+                # 낫표를 반 칸 당긴 줄(fit.pull_corners)은 낫표 칸이 내어쓰기보다 앞에 있다 — 있던 내어쓰기를 그대로 둔다
+                # (다시 재면 둘째 줄이 당긴 만큼 앞으로 와 낫표 획과 어긋남, 되풀이해도 같게 2026-11-04)
+                continue
+            k2 = next((i + 1 for i in range(len(text) - 1, k, -1) if text[i] in ARROWS), 0)
+            while k2 and k2 < len(text) and text[k2] in " ⎵⍽":
+                k2 += 1
+            if k2 and k2 < len(chs) and abs(cur - sum(c[1] for c in chs[:k2])) <= 0.02 * chs[k2][1]:
+                # 화살표 뒤 첫 글자 밑에 맞춘 줄(fit.arrow_breaks)은 그 내어쓰기를 그대로 둔다(되풀이해도 같게 2026-11-04)
+                continue
+            old = p.get("paraPrIDRef")
+            p.set("paraPrIDRef", self.hedit.para_hang(old, hang))
+            if not by_colon and label_long(*lay.para_lines(p, body_w)):
+                # 개조식이라도 이름표 뒤로 넘어간 둘째 줄이 길면(줄 폭의 절반 이상·셋째 줄까지) 이름표 '(' 자리에(사용자 2026-11-15
+                # '개조식이더라도 둘째줄이 길게(50%이상) 들어가면 이름표 (에 맞추는걸로')
+                p.set("paraPrIDRef", old)
+                self._marker_hang(p, text, lay)
+                continue
+            if by_colon:
+                n_colon += 1
+            else:
+                n_label += 1
+        if n_colon:
+            self.warn(f"쌍점(:) 뒤 내용이 두 줄 이상인 문단 {n_colon}개는 둘째 줄을 쌍점 뒤 첫 글자에 맞췄습니다.")
+        if n_label:
+            self.warn(f"괄호 이름표 뒤 내용이 두 줄 이상인 문단 {n_label}개는 둘째 줄을 이름표 뒤 첫 글자에 맞췄습니다.")
+
+    def _marker_hang(self, p, text, lay):
+        """둘째 줄을 머리 기호 뒤 첫 글자(= 이름표 '(' 자리)에 정확히 — 두 줄 이상인 문단만."""
+        pre, mark, _ = split_marker(text)
+        if not mark or "\t" in pre or len(pre) >= len(text):
+            return
+        chs = lay.chars(p)
+        want = sum(c[1] for c in chs[:len(pre)])
+        cur = -self.styles.para.get(p.get("paraPrIDRef"), {}).get("intent", 0)
+        if abs(cur - want) > 0.02 * chs[len(pre)][1]:
+            p.set("paraPrIDRef", self.hedit.para_hang(p.get("paraPrIDRef"), want))
+
+    def _reset_hang(self, p, text, lay):
+        """이름표 없는 머리 기호 줄: 견본 문단의 내어쓰기가 머리 기호 뒤 첫 글자보다 한 글자 넘게 크면(앞 판의 이름표용 값 — 새 글의
+        둘째 줄이 33mm에서 시작, 평가 2026-11-09) 새 글의 머리로 다시 잰다. 화살표 뒤에 맞춘 줄은 그대로(arrow_breaks가 맡음)."""
+        pre, mark, _ = split_marker(text)
+        if not mark or "\t" in pre or len(pre) >= len(text):
+            return
+        chs = lay.chars(p)
+        want = sum(c[1] for c in chs[:len(pre)])
+        em = chs[len(pre)][1]
+        cur = -self.styles.para.get(p.get("paraPrIDRef"), {}).get("intent", 0)
+        if cur - want <= em:
+            return
+        k2 = next((i + 1 for i in range(len(text) - 1, len(pre), -1) if text[i] in ARROWS), 0)
+        while k2 and k2 < len(text) and text[k2] in " ⎵⍽":
+            k2 += 1
+        if k2 and k2 < len(chs) and abs(cur - sum(c[1] for c in chs[:k2])) <= 0.02 * chs[k2][1]:
+            return
+        p.set("paraPrIDRef", self.hedit.para_hang(p.get("paraPrIDRef"), want))
+
+    def made_reset(self):
+        """이 스킬이 만든 문서를 견본으로 쓸 때 앞 판의 맞춤값을 되돌린다 — 끝 줄·빈칸 맞춤이 줄인 내용 자간(-5% 위에 또 줄여 -11%),
+        쪽 맞춤이 낮춘 줄 간격(평가 2026-11-09). 기준은 만들 때 남긴 표시(base_line·base_sp), 없으면 같은 수준 문단에서 가장 많이 쓴 값.
+        돌려주는 것: 이번에 맞추기 전 기준값(만든 문서에 다시 남김)."""
+        meta = read_doc_meta(self.pkg)
+        rows = {}
+        for p in self.protos:
+            text = para_text(p)
+            lv = marker_level(text)
+            if para_tables(p) or not lv or not text.strip():
+                continue
+            pp = self.styles.para.get(p.get("paraPrIDRef"), {})
+            row = rows.setdefault(lv, {"lines": [], "sp": {}, "paras": []})
+            if pp.get("line_type", "PERCENT") == "PERCENT":
+                row["lines"].append(pp.get("line", 160))
+            row["paras"].append(p)
+            pos, head = 0, head_length(text)
+            for r in para_runs(p):
+                t = run_text(r)
+                st, pos = pos, pos + len(t)
+                if t.strip() and st >= head and r.find(T("hp:tbl")) is None:
+                    sp = self.styles.char.get(r.get("charPrIDRef"), {}).get("spacing", 0)
+                    if PROFILE["spacing_min_pct"] <= sp <= PROFILE["spacing_max_pct"]:
+                        row["sp"][sp] = row["sp"].get(sp, 0) + len(t)
+
+        def table(key):
+            return {int(a): int(b) for a, b in (x.split(":") for x in meta.get(key, "").split(",") if x)}
+
+        lines, sps = table("base_line"), table("base_sp")
+        # 만든 뒤 사람이 줄 간격을 바꾼 수준(만들 때 도구가 남긴 값 fit_line 밖의 값이 있음)은 되돌리지 않고 그 값을 새 기준으로 —
+        # '사용자가 고친 것을 되돌리지 않는다'(write.md). 표시가 한글 저장을 견디게 되면서(문서 정보) 고쳐 다시 올린 파일에도 되돌리기가 걸리므로
+        fits = {int(a): {int(v) for v in b.split("|") if v} for a, b in (x.split(":") for x in meta.get("fit_line", "").split(",") if x)}
+        edited = {lv for lv, row in rows.items() if lv in fits and any(int(v) not in fits[lv] for v in row["lines"])}
+        for lv in edited:
+            lines[lv] = max(set(rows[lv]["lines"]), key=rows[lv]["lines"].count)
+        for lv, row in rows.items():
+            if lv not in lines and row["lines"]:
+                lines[lv] = max(set(row["lines"]), key=row["lines"].count)
+            if lv not in sps and row["sp"]:
+                sps[lv] = max(row["sp"], key=row["sp"].get)
+        if meta.get("made"):
+            n_line = n_sp = 0
+            # 빈 줄: 쪽 맞춤은 쪽마다 줄 간격을 통째로 같은 만큼 늘리거나 줄여 빈 줄도 함께 바뀐다 — 바로 뒤 글 문단이 기준에서 벗어난
+            # 만큼 되돌림(빈 줄은 수준 기준이 없어 옛 판은 늘린 값이 견본에 남아 쌓였음, 시험 doc_mark_check 2026-11-15)
+            blank_fix = []
+            for k, p in enumerate(self.protos):
+                if para_tables(p) or para_text(p).strip():
+                    continue
+                pp = self.styles.para.get(p.get("paraPrIDRef"), {})
+                if pp.get("line_type", "PERCENT") != "PERCENT":
+                    continue
+                nxt = next((q for q in self.protos[k + 1:k + 4] if not para_tables(q) and para_text(q).strip()), None)
+                lv2 = marker_level(para_text(nxt)) if nxt is not None else 0
+                if not lv2 or lv2 not in lines or lv2 in edited:
+                    continue
+                d = self.styles.para.get(nxt.get("paraPrIDRef"), {}).get("line", lines[lv2]) - lines[lv2]
+                if d and pp.get("line", 160) - d >= 140:  # 쪽 맞춤은 140% 이상인 줄만 늘림(fit_pages MIN_LINE, Codex 검토)
+                    blank_fix.append((p, pp.get("line", 160) - d))
+            for p, v in blank_fix:
+                p.set("paraPrIDRef", self.hedit.para_line(p.get("paraPrIDRef"), v))
+                n_line += 1
+            for lv, row in rows.items():
+                for p in row["paras"]:
+                    pid = p.get("paraPrIDRef")
+                    pp = self.styles.para.get(pid, {})
+                    if (lv in lines and lv not in edited and pp.get("line_type", "PERCENT") == "PERCENT"
+                            and pp.get("line") != lines[lv]):
+                        p.set("paraPrIDRef", self.hedit.para_line(pid, lines[lv]))
+                        n_line += 1
+                    pos, head, hit = 0, head_length(para_text(p)), False
+                    for r in para_runs(p):
+                        t = run_text(r)
+                        st, pos = pos, pos + len(t)
+                        cid = r.get("charPrIDRef")
+                        sp = self.styles.char.get(cid, {}).get("spacing", 0)
+                        if (lv in sps and t.strip() and st >= head and r.find(T("hp:tbl")) is None and sp != sps[lv]
+                                and PROFILE["spacing_min_pct"] <= sp <= PROFILE["spacing_max_pct"]):
+                            r.set("charPrIDRef", self.hedit.char_spacing(cid, sps[lv]))
+                            hit = True
+                    n_sp += hit
+            if n_line or n_sp:
+                self.warn(f"이 스킬이 만든 문서를 견본으로 써서 앞 판이 맞춘 값을 되돌린 뒤 다시 맞췄습니다(줄 간격 {n_line}문단·내용 자간 {n_sp}문단) — "
+                          "한글에서 손으로 바꾼 내용 자간도 함께 되돌아갑니다(손으로 바꾼 줄 간격은 그대로 둠).")
+            if edited:
+                self.warn("견본에서 손으로 바꾼 줄 간격(" + ", ".join(f"{'□○-*'[lv - 1]} {lines[lv]}%" for lv in sorted(edited) if 1 <= lv <= 4)
+                          + ")은 그대로 새 기준으로 삼았습니다.")
+        return {"base_line": ",".join(f"{k}:{lines[k]}" for k in sorted(lines)),
+                "base_sp": ",".join(f"{k}:{sps[k]}" for k in sorted(sps))}
+
+    def apply_line_pct(self, v):
+        """계획 "line_pct": 본문 줄 간격을 v%로 정한다(받은 요청 2026-11-22 — 의뢰서 190%를 견본 사본·기준값 파일 없이 한 줄로).
+        견본 ○·-·· 문단(없으면 기호 없는 글 문단)이 가장 많이 쓴 줄 간격을 본문으로 보고, 본문 둘레(±30%p — 견본마다 171~189%·만든 문서의 - 160%처럼
+        조금씩 다른 값)의 ○·-·기호 없는 글 문단은 모두 v로, 제목(□·Ⅰ.)·설명(*·※) 줄은 같은 폭만큼 옮겨 위계를 지킨다. 빈 줄·날짜 줄·
+        ■ 제목·단위 줄·표 칸은 그대로. 쪽 맞춤은 이 값을 줄이거나 늘리지 않는다(build.py가 Fitter에 알림). 돌려주는 것: 바꾼 문단 수."""
+        rows = []
+        for p in self.protos:
+            text = para_text(p)
+            pp = self.styles.para.get(p.get("paraPrIDRef"), {})
+            if (para_tables(p) or not text.strip() or pp.get("line_type", "PERCENT") != "PERCENT"
+                    or UNIT_RE.match(text) or text.lstrip().startswith("■") or DATE_HEAD_RE.match(text)):
+                continue
+            rows.append((p, marker_level(text), pp.get("line", 160)))
+        # 본문 기준은 ○ 줄(없으면 -, 그것도 없으면 기호 없는 글) — 만든 문서를 견본으로 쓰면 - 줄 기준값이 160으로 남아 있어
+        # 그것을 본문으로 잡으면 □ 190%가 220%로 올라갔음(의뢰서 시험 2026-11-22)
+        body_lines = next((ls for ls in ([line for _, lv, line in rows if lv == k] for k in (2, 3, 0)) if ls), [])
+        if not body_lines:
+            return 0
+        body = max(set(body_lines), key=body_lines.count)
+        n = 0
+        for p, lv, cur in rows:
+            if lv in (0, 2, 3):
+                new = v if abs(cur - body) <= 30 else cur
+            else:  # 제목·설명 줄: 본문과의 차이를 지킴(제목 +10 등)
+                new = max(100, min(300, cur + v - body))
+            if new != cur:
+                p.set("paraPrIDRef", self.hedit.para_line(p.get("paraPrIDRef"), new))
+                n += 1
+        # 맞추기 전 기준값(만든 문서 표시 base_line)도 새 값으로 — 이 문서를 다시 견본으로 쓸 때 되돌리지 않게
+        per = {}
+        for p, lv, _ in rows:
+            if lv:
+                per.setdefault(lv, []).append(self.styles.para.get(p.get("paraPrIDRef"), {}).get("line", 160))
+        if per:
+            self.fit_base["base_line"] = ",".join(f"{lv}:{max(set(ls), key=ls.count)}" for lv, ls in sorted(per.items()))
+        return n
+
+    def fit_line_mark(self):
+        """맞춤을 끝낸 문서에 수준(□ ○ - *)마다 남은 줄 간격 값들 — '1:150|170,2:140'. 이 문서를 다시 견본으로 쓸 때 그 밖의 값이
+        있으면 사람이 바꾼 것으로 본다(made_reset)."""
+        seen = {}
+        for p in self.sec:
+            if p.tag != T("hp:p") or para_tables(p):
+                continue
+            text = para_text(p)
+            lv = marker_level(text)
+            pp = self.styles.para.get(p.get("paraPrIDRef"), {})
+            if lv and text.strip() and pp.get("line_type", "PERCENT") == "PERCENT":
+                seen.setdefault(lv, set()).add(int(pp.get("line", 160)))
+        return ",".join(f"{lv}:{'|'.join(map(str, sorted(seen[lv])))}" for lv in sorted(seen))
+
+    def small_squares(self):
+        """□ 큰 항목 기호만 뒤 글자보다 SQUARE_DOWN(2pt) 작게(사용자 2026-11-04 '□도 줄이기' — ■ 표 제목 기호를 2pt 줄인 것과
+        같게, ○는 원래 작은 ○). □ 뒤 빈칸은 그대로 두어 글 시작 자리는 바뀌지 않는다. 표지 개요 상자 안 □ 줄도. 바꾼 수."""
+        n = 0
+        for p in self.sec.iter(T("hp:p")):
+            text = para_text(p)
+            body = text.lstrip(" " + FW)
+            if not body.startswith("□") or para_tables(p):
+                continue
+            k = text.index("□")
+            self._split_run_at(p, k + 1)
+            mark, size, pos = None, None, 0
+            for r in para_runs(p):
+                t = run_text(r)
+                if r.find(T("hp:t")) is not None:
+                    if mark is None and pos <= k < pos + len(t):
+                        mark = r if t.strip() == "□" else False
+                    elif mark is not None and mark is not False and size is None and t.strip():
+                        size = self.styles.char.get(r.get("charPrIDRef"), {}).get("size")
+                pos += len(t)
+            if mark is None or mark is False or not size:
+                continue
+            cid = mark.get("charPrIDRef")
+            d = size - SQUARE_DOWN - self.styles.char.get(cid, {}).get("size", size)
+            if abs(d) > 0.01:
+                mark.set("charPrIDRef", self.hedit.char_size(cid, d))
+                n += 1
+        if n:
+            self.warn(f"□ 기호 {n}개를 뒤 글자보다 {SQUARE_DOWN}pt 작게 했습니다(■ 표 제목 기호와 같게).")
+
+    def _has_image(self, tbl):
+        """그림 칸(배경 그림)이 든 표인가 — 만들 때 기록한 칸 또는 칸 모양에 그림 채우기가 든 칸."""
+        fills = {bf.get("id"): bf for bf in self.pkg.xml("Contents/header.xml").iter(T("hh:borderFill"))}
+        for *_, tc in table_grid(tbl):
+            bf = fills.get(tc.get("borderFillIDRef"))
+            if tc in self.image_cells or (bf is not None and bf.find(".//" + T("hc:img")) is not None):
+                return True
+        return False
+
+    def date_gap(self):
+        """날짜·부서 줄 아래를 DATE_NEXT(1pt) 띄운다(사용자 2026-11-05 '날짜 부서 이름 들어가는 줄 아래 여백을 조금만 더') —
+        첫 날짜 줄이고 바로 아래가 표(요약 상자)일 때만. 이미 그만큼 띄웠으면 그대로. 바꿨으면 1."""
+        ps = [x for x in self.sec if x.tag == T("hp:p")]
+        for k, p in enumerate(ps[:12]):  # 표지(문단 5개)가 앞에 있어도(옛 판은 6문단까지만 봐 표지 문서는 빠졌음, 2026-11-11)
+            if para_tables(p) or not DATE_LINE_RE.match(para_text(p)):
+                continue
+            if k + 1 >= len(ps) or not para_tables(ps[k + 1]):
+                return 0
+            pid = p.get("paraPrIDRef")
+            if self.styles.para.get(pid, {}).get("next", 0) >= DATE_NEXT:
+                return 0
+            p.set("paraPrIDRef", self.hedit.para_margin(pid, "next", DATE_NEXT))
+            return 1
+        return 0
+
+    def _ref_sole_tables(self, ps):
+        """참고 자체가 표인 곳의 그 표 문단들(사용자 2026-11-05 '참고 자체가 표이고 그 타이틀이 표의 타이틀인 경우 검은색 네모
+        제목은 없게'): 참고 머리표에서 다음 참고 머리표(없으면 끝)까지 본문 자료 표가 하나뿐이고, 그 밖의 문단이 기준·단위 줄,
+        ■ 제목 줄, 표 아래 ※·* 줄, 빈 줄뿐이면 참고 머리표의 제목이 곧 그 표의 제목이다. 다른 표·그림 상자·□·○ 글이 있으면
+        참고 머리표는 쪽 제목일 뿐이라 표마다 ■ 제목을 단다(그대로)."""
+        found = set()
+        heads = [k for k, p in enumerate(ps) if self._is_ref_head(p)]
+        for n, h in enumerate(heads):
+            end = heads[n + 1] if n + 1 < len(heads) else len(ps)
+            tables, other = [], False
+            for p in ps[h + 1:end]:
+                tbls = para_tables(p)
+                if tbls:
+                    tbl = tbls[0]
+                    if tbl in self.flow_tables or self._has_image(tbl) or not Fitter._is_data_table(tbl):
+                        other = True
+                    else:
+                        tables.append(p)
+                    continue
+                t = para_text(p).strip()
+                if not t or UNIT_RE.match(t) or t.startswith((TABLE_TITLE_MARK, "※", "*")):
+                    continue
+                other = True
+            if len(tables) == 1 and not other:
+                found.add(tables[0])
+        return found
+
+    def _heading_tables(self, ps):
+        """□(·Ⅰ.) 제목 바로 아래 표(사이에 ■ 제목·기준·단위 줄·빈 줄만): 그 ■ 제목이 □ 제목과 같거나(띄어쓰기 무시) 그 □ 묶음이
+        표 하나와 단위 줄·※·*뿐이면 □ 제목이 곧 표 제목이다 — ■ 제목을 달지 않는다(사용자 2026-11-05 '□ 추진일정' 바로 아래
+        '■ 추진일정' 사진, '이런경우엔 검은색 상자 제목은 없애는게 맞음'). □ 아래 ○ 글 뒤에 오는 표는 그대로 ■ 제목."""
+        def norm(t):
+            return re.sub(r"[\s⎵⍽　*]", "", t)
+
+        def heading(p):
+            return (not para_tables(p) and marker_level(para_text(p)) == 1
+                    and not para_text(p).lstrip().startswith(TABLE_TITLE_MARK))
+
+        def data(p):
+            tbls = para_tables(p)
+            return bool(tbls) and tbls[0] not in self.flow_tables and not self._has_image(tbls[0]) \
+                and Fitter._is_data_table(tbls[0])
+
+        found = set()
+        for h, p in enumerate(ps):
+            if not heading(p):
+                continue
+            k, titles = h + 1, []
+            while k < len(ps) and not para_tables(ps[k]) and (not para_text(ps[k]).strip() or UNIT_RE.match(para_text(ps[k]))
+                                                              or para_text(ps[k]).lstrip().startswith(TABLE_TITLE_MARK)):
+                if para_text(ps[k]).lstrip().startswith(TABLE_TITLE_MARK):
+                    titles.append(para_text(ps[k]).strip().lstrip(TABLE_TITLE_MARK))
+                k += 1
+            if k >= len(ps) or not data(ps[k]):
+                continue
+            end = next((j for j in range(k + 1, len(ps)) if heading(ps[j]) or self._is_ref_head(ps[j])), len(ps))
+            sole = all(not para_tables(q) and (not para_text(q).strip() or UNIT_RE.match(para_text(q))
+                                               or para_text(q).lstrip().startswith((TABLE_TITLE_MARK, "※", "*")))
+                       for q in ps[k + 1:end])
+            body = split_marker(para_text(p))[2]
+            if sole or any(norm(t) == norm(body) for t in titles):
+                found.add(ps[k])
+        return found
+
+    def flow_steps(self, out):
+        """도표(워크플로우 표)는 진행 단계가 FLOW_MIN_STEPS(6)개 이상일 때만 쓴다(사용자 2026-11-05 '워크플로우 표는 진행일정이
+        6개 이상일때만 쓰는걸로(좌우가 꽉차게 2단으로)'). 상자(화살표·'< 제목 >'·빈 칸이 아닌 칸)가 그보다 적은 도표를 '고쳐야 함'으로
+        알린다. 만든 도표(flow)와 이미 쓴 문서의 투명 선 도표 모두. 찾은 수."""
+        few = []
+        for p in out:
+            for tbl in para_tables(p):
+                if tbl not in self.flow_tables:
+                    continue
+                boxes = []
+                for *_, tc in table_grid(tbl):
+                    t = " ".join(para_text(cp) for cp in cell_paras(tc)).strip()
+                    if t and t not in ("→", "⇒", "➜") and not t.startswith(("<", "〈", "＜")):
+                        boxes.append(t)
+                if boxes and len(boxes) < FLOW_MIN_STEPS:
+                    few.append(f"{boxes[0][:8]}…({len(boxes)}단계)")
+        if few:
+            self.warn(f"진행 단계가 {FLOW_MIN_STEPS}개보다 적은 도표 {len(few)}개(" + ", ".join(f"‘{t}’" for t in few[:3])
+                      + f"): 도표(워크플로우 표)는 단계가 {FLOW_MIN_STEPS}개 이상일 때만 씁니다(4·5개는 한 줄, 6·7·8개는 두 줄로 "
+                      "좌우를 꽉 채움) — 그보다 적으면 표(시기·내용)나 ○ 글로 쓰세요.", level="fix")
+        return len(few)
+
+    def _head_titled(self, ps):
+        """■ 제목을 달지 않는 표: 참고 자체가 표 하나인 곳 + □ 제목 바로 아래 표(□ 제목이 곧 표 제목)."""
+        return self._ref_sole_tables(ps) | self._heading_tables(ps)
+
+    def ref_sole_titles(self, out, remove=True):
+        """바로 위 제목이 곧 표 제목인 곳(_head_titled — 참고 자체가 표 하나, □ 제목 바로 아래 표)의 ■ 제목 줄을 뺀다(사용자 2026-11-05).
+        remove=False(검사만)이면 빼지 않고 '고쳐야 함'으로 알린다. 뺀(또는 찾은) 수."""
+        hits = []
+        titled = self._head_titled(out)
+        for p in (q for q in out if q in titled):  # 문서 차례대로 — 모음(set) 차례로 돌면 같은 계획도 돌릴 때마다 알림의 이름 순서가 달라짐
+            j = out.index(p) - 1
+            while j >= 0 and not para_tables(out[j]) and UNIT_RE.match(para_text(out[j])):
+                j -= 1
+            if j >= 0 and not para_tables(out[j]) and para_text(out[j]).lstrip().startswith(TABLE_TITLE_MARK):
+                hits.append(j)
+        if not hits:
+            return 0
+        names = [para_text(out[j]).strip().lstrip(TABLE_TITLE_MARK + " ")[:14] for j in hits]
+        if not remove:
+            self.warn(f"바로 위 제목과 겹치는 ■ 제목 {len(hits)}개(" + ", ".join(f"‘{t}’" for t in names[:3])
+                      + "): □ 제목·참고 머리표 제목이 곧 표 제목이라 ■ 제목 줄은 뺍니다(사용자 원칙).", level="fix")
+            return len(hits)
+        for j in sorted(hits, reverse=True):
+            q = out.pop(j)
+            if q.get("pageBreak") == "1" and j < len(out):
+                out[j].set("pageBreak", "1")
+            if q.getparent() is not None:
+                q.getparent().remove(q)
+        for k, m in enumerate(self.warnings):  # 앞서 table_units가 센 '■ 줄로 넣었습니다' 수에서 뺀다
+            hit = re.match(r"표 제목 (\d+)개를 표 위 왼쪽에 ■ 줄로 넣었습니다", m)
+            if hit:
+                left = int(hit.group(1)) - len(hits)
+                if left > 0:
+                    self.warnings[k] = m.replace(f"표 제목 {hit.group(1)}개", f"표 제목 {left}개", 1)
+                else:
+                    del self.warnings[k]
+                break
+        self.warn(f"바로 위 제목이 곧 표 제목인 곳 {len(hits)}개는 ■ 제목 줄을 넣지 않았습니다(□ 제목·참고 머리표 제목과 겹침 — "
+                  + ", ".join(f"‘{t}’" for t in names[:3]) + ").")
+        return len(hits)
+
+    def untitled_tables(self):
+        """제목 없는 본문 자료 표 문단 목록(table_titles 검사와 같은 기준·차례) — 이미 만든 문서에 ■ 제목을 달 때 쓴다.
+        참고 쪽 표도 본다(참고 머리표는 쪽 제목일 뿐 — 참고 자체가 표 하나인 곳은 빼고). 흐름 표는 뺀다."""
+        ps = [x for x in self.sec if x.tag == T("hp:p")]
+        sole = self._head_titled(ps)
+        found = []
+        for k, p in enumerate(ps):
+            tables = para_tables(p)
+            if not tables:
+                continue
+            if self._is_ref_head(p) or p in sole:
+                continue  # 참고 머리표는 쪽 제목 — 그 아래 표도 저마다 ■ 제목(사용자 2026-11-05), 참고 자체가 표면 머리표 제목이 표 제목
+            tbl = tables[0]
+            if tbl in self.flow_tables or not Fitter._is_data_table(tbl) or self._has_image(tbl):
+                continue  # 그림 상자(캡처·그래프)는 머리 칸·[그림 N] 줄이 제목 — ■ 제목을 묻지 않음
+            j = k - 1
+            while j >= 0 and not para_tables(ps[j]) and UNIT_RE.match(para_text(ps[j])):
+                j -= 1
+            if j >= 0 and is_table_title(ps[j]):
+                continue
+            found.append(p)
+        return found
+
+    def add_table_titles(self, titles):
+        """이미 만든 문서의 제목 없는 표 위에 '■ 제목' 줄을 넣는다(사용자 2026-11-04 '여기는 제목을 달아야 하는거 아닌가요?').
+        titles: untitled_tables() 차례대로의 제목 목록(빈 값은 건너뜀). 기준·단위 줄이 있으면 그 줄을 복사해 그 위에,
+        없으면 문서의 다른 기준·단위 줄(없으면 표 바로 앞 글 문단)을 복사해 표 바로 위에 넣는다. 강제 쪽 나눔은 제목 줄로 옮긴다.
+        글꼴·크기·왼쪽 정렬·줄 간격은 Fitter.fit_tables가 표에 맞춘다. 넣은 수."""
+        tables = self.untitled_tables()
+        if len(titles) != len(tables):
+            raise BuildError(f"표 제목 {len(titles)}개를 받았는데 제목 없는 표는 {len(tables)}개입니다.")
+        any_unit = next((x for x in self.sec.iter(T("hp:p"))
+                         if not para_tables(x) and UNIT_RE.match(para_text(x))), None)
+        n = 0
+        for p, title in zip(tables, titles):
+            title = str(title or "").strip().lstrip(TABLE_TITLE_MARK + " ")
+            if not title:
+                continue
+            top, prev = p, p.getprevious()
+            while prev is not None and prev.tag == T("hp:p") and not para_tables(prev) and UNIT_RE.match(para_text(prev)):
+                top, prev = prev, prev.getprevious()
+            src = top if top is not p else any_unit
+            if src is None:
+                src = prev
+                while src is not None and (src.tag != T("hp:p") or para_tables(src) or not para_text(src).strip()):
+                    src = src.getprevious()
+            if src is None:
+                continue
+            q = copy.deepcopy(src)
+            drop_linesegs(q)
+            runs = [r for r in para_runs(q) if r.find(T("hp:t")) is not None and run_text(r).strip()]
+            if not runs:
+                continue
+            for r in para_runs(q):
+                q.remove(r)
+            q.insert(0, self._mk(runs[0], f"{TABLE_TITLE_MARK} {title}"))
+            for key in ("pageBreak", "columnBreak"):
+                if q.get(key) is not None:
+                    q.set(key, "0")
+            if top.get("pageBreak") == "1":
+                top.set("pageBreak", "0")
+                q.set("pageBreak", "1")
+            top.addprevious(q)
+            n += 1
+        if n:
+            self.warn(f"표 제목 {n}개를 표 위 왼쪽에 ■ 줄로 넣었습니다.")
+        return n
+
+    def _split_run_at(self, p, k):
+        """문단 글자 위치 k가 한 조각(run) 가운데에 있으면 그 조각을 둘로 나눈다(모양은 같게)."""
+        pos = 0
+        for r in indexed_runs(p):
+            t = run_text(r)
+            start, end = pos, pos + len(t)
+            pos = end
+            if start < k < end and len(r) == 1:
+                tail = self._mk(r, t[k - start:])
+                set_run_text(r, t[:k - start], self.tab_proto)
+                r.addnext(tail)
+                return
+
+    def lone_dashes(self, out):
+        """항목 수 알림(사용자 원칙 2026-11-01 — 사람은 셋으로 정리하는 것을 좋아함): □ 아래 ○, ○ 아래 -, - 아래 ·는
+        셋쯤이 좋고 2~5개를 벗어나지 않게 한다. 하나뿐이거나 다섯을 넘으면 알린다. 참고 쪽(참고 머리표부터)은 세지 않는다.
+        □ 아래 ○가 하나뿐이면 (추진방향) → (주요내용) → 표 꼴로 나누면 자연스럽다."""
+        names = {1: "□", 2: "○", 3: "-"}
+        child = {1: "○", 2: "-", 3: "·"}
+        found = {1: [], 2: [], 3: []}
+        open_ = {}  # 수준 → [이름, 아래 항목 수]
+
+        def close(lv):
+            for k in [x for x in open_ if x >= lv]:
+                name, n = open_.pop(k)
+                if n == 1 or n > 5:
+                    found[k].append((name, n))
+
+        for k, p in enumerate(out):
+            if para_tables(p):
+                if self._is_ref_head(p):
+                    break
+                continue
+            text = para_text(p)
+            _, mark, _ = split_marker(text)
+            if not mark or is_table_title(p, out[k + 1:k + 5]):
+                continue  # ■ 표 제목은 표에 딸린 줄 — 항목으로 세지 않음
+            lv = marker_level(text)
+            if lv == 4:
+                continue  # * 설명·※ 참고는 세지 않고 지나감
+            if lv == 1 and mark[0] in ROMAN:
+                close(1)
+                if BASIS_TITLE_RE.search(text):  # Ⅰ. 근거법령 아래 ○도 둘 이상(사용자 원칙 2026-11-03)
+                    open_[1] = [text[_base_head(text):].lstrip(" " + FW)[:12], 0]
+                continue
+            if lv == 3:
+                lv = 4 if mark in "•∙·ㆍ" else 3  # 작대기 다음은 가운데점
+            name = text[_base_head(text):].lstrip(" " + FW).replace("**", "")[:12]
+            close(lv)
+            if lv - 1 in open_:
+                open_[lv - 1][1] += 1
+            if lv in names:
+                open_[lv] = [name, 0]
+        close(1)
+        for lv, items in found.items():
+            if not items:
+                continue
+            ones = [t for t, n in items if n == 1]
+            many = [f"{t}({n}개)" for t, n in items if n > 5]
+            head = f"{child[lv]} 항목 수 — 셋쯤이 좋고 2~5개를 벗어나지 않게(사용자 원칙): "
+            basis = [t for t in ones if lv == 1 and BASIS_TITLE_RE.search(t)]
+            ones = [t for t in ones if t not in basis]
+            if basis and getattr(self, "basis_searched", False):
+                # 찾아봤지만 더 없음(계획 "basis_searched": true) — 하나로 두고 알림만(사용자 2026-11-07 '훈령이나 지침, 매뉴얼,
+                # 유권해석 등을 찾아봐도 없으면', '1번') — 지어내지 않는다
+                self.warn("근거법령은 ○ 하나로 두었습니다 — 시행령·시행규칙·자치법규·행정규칙(훈령·예규·고시·지침)·매뉴얼·"
+                          "법령해석례(유권해석)까지 찾아봤지만 확인된 것이 없음(계획 basis_searched).")
+            elif basis:  # 근거법령도 ○ 둘 이상(사용자 원칙 2026-11-03) — 나누거나 합치지 말고 확인된 근거를 더함
+                self.warn(head + f"○ 하나뿐인 근거법령({', '.join('‘' + t + '’' for t in basis)}) → 확인된 다른 근거(같은 법령의 시행령·"
+                          "시행규칙, 조례·규칙, 훈령·예규·고시·지침, 매뉴얼·계획, 법령해석례(유권해석))를 법령 검색 도구로 찾아 ○로 "
+                          "더하세요(확인한 것만). 찾아봐도 없으면 계획에 \"basis_searched\": true — 하나로 두고 알림으로 낮춤.",
+                          level="fix", kind="basis")
+            tail = {1: " → (추진방향)·(주요내용)처럼 둘 이상으로 나누거나 다른 □와 합치세요",
+                    2: " → -를 둘 이상으로 나누거나 ○ 글에 합치세요",
+                    3: " → ·를 둘 이상으로 나누거나 - 글에 합치세요"}[lv]
+            if lv == 1:  # □마다 따로 — 한 문장에 모으면 "omit": ["basis"]가 다른 □의 항목 수까지 숨김(평가 2026-11-09)
+                for t in ones:
+                    self.warn(head + f"○ 하나뿐인 {names[lv]} ‘{t}’{tail}.", level="fix", kind="counts")
+                for t in many:
+                    self.warn(head + f"○가 다섯을 넘는 {names[lv]} {t} → 묶거나 나누세요.", level="fix", kind="counts")
+                continue
+            msg = head
+            if ones:
+                msg += f"{child[lv]} 하나뿐인 {names[lv]} {len(ones)}개({', '.join('‘' + t + '’' for t in ones)})" + tail
+            if many:
+                msg += ("; " if ones else "") + f"{child[lv]}가 다섯을 넘는 {names[lv]} " + ", ".join(many) + " → 묶거나 나누세요"
+            if ones or many:
+                self.warn(msg + ".", level="fix", kind="counts")
+
+    def _is_ref_head(self, p):
+        tables = para_tables(p)
+        if not tables or tables[0].get("rowCnt") != "1" or tables[0].get("colCnt") == "1":
+            return False
+        grid = table_grid(tables[0])
+        return bool(grid) and bool(re.match(r"^\s*(참\s*고|붙\s*임|별\s*첨|첨\s*부)",
+                                            " ".join(para_text(cp) for cp in cell_paras(grid[0][4]))))
+
+    def _ref_title(self, p):
+        grid = table_grid(para_tables(p)[0])
+        return " ".join(para_text(cp) for *_, tc in grid for cp in cell_paras(tc))
+
+    def _keep_chars(self, p, lo, hi):
+        """문단 글에서 [lo, hi) 글자만 남긴다(글 조각만 있는 문단 — 참고 근거법령 줄 나누기·머리 기호 빼기)."""
+        pos = 0
+        for r in list(indexed_runs(p)):
+            t = run_text(r)
+            a, b = pos, pos + len(t)
+            pos = b
+            if b <= lo or a >= hi:
+                if t:
+                    r.getparent().remove(r)
+            elif a < lo or b > hi:
+                set_run_text(r, t[max(lo, a) - a:min(hi, b) - a], self.tab_proto)
+
+    def law_refs(self, out):
+        """참고 근거법령(참고 머리표 제목에 '법령'·'조문')은 상자 없이, 머리 기호 없이 원문 번호로(사용자 2026-11-15 '참고 근거법령은 표를
+        풀자. 그런데 앞에 넘버링을 붙이니까 너무 이상하다', '굳이 구분 기호를 붙일 이유가 없는듯' → 시안 B 고름):
+        - 법령 이름 줄(「법령」·<법령>)은 기호 없이 굵게, ○ 자리에서, 다음 줄과 함께
+        - 그 아래 조문 줄은 ○ 글자 자리에서 — 조 줄('제○조(…)')은 둘째 줄도 같은 자리, 항(①)은 같은 자리·호(1.) 두 칸·목(가.) 네 칸
+          들이고 둘째 줄은 번호 뒤 첫 글자(fit_lines._quote_hang, 조문 상자와 같은 규칙), 글자는 법령 이름보다 1pt 작게
+        - '○「법」 제39조(…) ① …'처럼 이름과 조문을 한 줄에 쓰면 이름 줄과 조 줄로 나눔. ※·* 줄과 표는 그대로.
+        견본이 조문 상자(제목 걸친 상자)를 쓰면 그 상자 블록은 그대로 둔다(따르는 차례 — 견본 먼저)."""
+        self.law_paras, self.law_notes = {}, set()
+        name_re = re.compile(r"[「<〈《]")
+        split_re = re.compile(r"[ ⎵⍽]*(?=제\d+조|\[별표|<별표|〔별표)")
+        # 기본 ○ 자리: 문서의 첫 ○ 줄 모양(왼쪽 여백·내어쓰기)
+        o_left, o_x1 = None, None
+        lay = Layout(self.styles, self.metrics)
+        for p in out:
+            t = para_text(p)
+            if not para_tables(p) and marker_level(t) == 2:
+                pp = self.styles.para.get(p.get("paraPrIDRef"), {})
+                ws = len(t) - len(t.lstrip(" ⎵⍽"))  # 기호 앞 줄머리 빈칸(나중에 one_space가 여백으로 바꿈)까지 쳐서 ○ 자리
+                o_left = pp.get("left", 0) + int(round(sum(c[1] for c in lay.chars(p)[:ws])))
+                o_x1 = pp.get("left", 0) - pp.get("intent", 0)
+                break
+        res, in_law, name_pt, names, lines = [], False, None, 0, 0
+        last_law = False  # 바로 앞이 상자 없는 법령 줄인가 — 조문 상자(표) 아래 ※ 출처는 상자 왼쪽 끝 그대로
+        ref_names, first_article = 0, True  # 이 참고의 법령 이름 줄 수, 다음 조 줄이 법령 이름 바로 밑 첫 조인가
+        kinds = []  # (문단, 'name'|'article'|'item'|'note') — 조 묶음째 쪽 나눔(아래)
+        for p in out:
+            if para_tables(p):
+                if self._is_ref_head(p):
+                    in_law = bool(re.search(r"법령|조문|법규", self._ref_title(p)))
+                    ref_names, first_article = 0, True
+                res.append(p)
+                last_law = False
+                continue
+            text = para_text(p)
+            if not in_law or not text.strip() or o_left is None or p in getattr(self, "case_paras", {}):
+                res.append(p)  # 판례·해석례 발췌 줄은 case_refs가 맡음('관련 법령·판례'처럼 한 참고에 함께 둘 때)
+                last_law = last_law and p not in getattr(self, "case_paras", {})
+                continue
+            pre, mark, body = split_marker(text)
+            if mark and mark in "※*＊":
+                # 조문 아래 ※ 출처·* 풀이: 조문 왼쪽 끝(○ 글자 자리)에서, 조문 글보다 2pt 작게
+                if not last_law:
+                    res.append(p)
+                    continue
+                if name_pt:
+                    delta = (name_pt - 1 - NOTE_REF_PT) - self._main_pt(p)
+                    for r in indexed_runs(p):
+                        if delta:
+                            r.set("charPrIDRef", self.hedit.char_size(r.get("charPrIDRef"), delta))
+                ws = len(text) - len(text.lstrip(" ⎵⍽"))
+                if ws:
+                    self._keep_chars(p, ws, len(text))
+                pid = self.hedit.para_margin(p.get("paraPrIDRef"), "left", o_x1)
+                p.set("paraPrIDRef", self.hedit.para_line(pid, LAW_LINE))  # 조문과 같은 줄 간격(사용자 2026-11-18 고친 판)
+                self.law_notes.add(p)
+                kinds.append((p, "note"))
+                res.append(p)
+                continue
+            if mark and marker_level(text) == 1:
+                res.append(p)
+                continue
+            sym = bool(mark) and not re.match(r"[\d①-⑳㉑-㉟㊱-㊿가-힣(]", mark)  # ○ - · 같은 기호(번호 아님)
+            body_s = body.lstrip(" ⎵⍽") if sym else text.lstrip(" ⎵⍽")
+            lead = len(text) - len(body_s)
+            if name_re.match(body_s) and (not mark or marker_level(text) == 2):
+                close = max(body_s.find("」"), body_s.find(">"), body_s.find("〉"), body_s.find("》"))
+                m = split_re.search(body_s, close + 1) if close >= 0 else None
+                tail = None
+                if m and body_s[m.end():].strip():
+                    tail = copy.deepcopy(p)
+                    self._keep_chars(tail, lead + m.end(), len(text))
+                    self._keep_chars(p, lead, lead + m.start())
+                else:
+                    self._keep_chars(p, lead, len(text))
+                for r in indexed_runs(p):
+                    r.set("charPrIDRef", self.hedit.char_bold(r.get("charPrIDRef")))
+                pid = self.hedit.para_margin(p.get("paraPrIDRef"), "left", o_left)
+                pid = self.hedit.para_hang(pid, 0)
+                name_pt = self._main_pt(p)
+                if ref_names:  # 두 번째 법령부터 위를 조문 글 한 줄만큼(쪽 맨 위에서는 한글·어림 모두 위 여백을 두지 않음)
+                    pid = self.hedit.para_margin(pid, "prev", int(round((name_pt - 1) * LAW_LINE * LAW_NAME_GAP)))
+                p.set("paraPrIDRef", self.hedit.para_keep_next(pid))
+                kinds.append((p, "name"))
+                res.append(p)
+                names += 1
+                ref_names += 1
+                first_article = True
+                last_law = True
+                if tail is None:
+                    continue
+                p, text = tail, para_text(tail)
+                lead = 0
+            elif sym:
+                self._keep_chars(p, lead, len(text))
+            # 조문 줄
+            text = para_text(p)
+            lvl = quote_indent(text)
+            rest = text[len(OMIT_DOTS):].lstrip(" ⎵⍽") if text.startswith(OMIT_DOTS) else None
+            dot_lvl = quote_indent(rest) if rest else None  # '··· ⑥ 관리청은 …' — ⑥ 단계 자리, 둘째 줄은 '⑥ ' 뒤 폭만큼
+            target = (name_pt or self._main_pt(p) + 1) - 1
+            delta = target - self._main_pt(p)
+            if delta:
+                for r in indexed_runs(p):
+                    r.set("charPrIDRef", self.hedit.char_size(r.get("charPrIDRef"), delta))
+            size = self._main_pt(p)
+            step = lvl if lvl is not None else dot_lvl
+            pid = self.hedit.para_margin(p.get("paraPrIDRef"), "left", int(round(o_x1 + (step or 0) * size * 100)))
+            # 위 여백: 항·호·목 1pt, 법령 이름 바로 밑 첫 조 2pt, 같은 법령의 두 번째 조부터는 조 묶음이 보이게 더(사용자 2026-11-18)
+            pid = self.hedit.para_margin(pid, "prev", 100 if step is not None else 200 if first_article else LAW_ARTICLE_GAP)
+            pid = self.hedit.para_line(pid, LAW_LINE)
+            kinds.append((p, "item" if step is not None else "article"))
+            if step is None:
+                first_article = False
+            hang = 0
+            if dot_lvl is not None:
+                font = self._body_font_of(p)
+                num = split_marker(rest)[0].rstrip(" ⎵⍽")
+                hang = sum(self.metrics.em(font, ch) for ch in num + " ") * size * 100
+            p.set("paraPrIDRef", self.hedit.para_hang(pid, hang))
+            self.law_paras[p] = o_x1
+            res.append(p)
+            lines += 1
+            last_law = True
+        # 조 단위로 쪽을 나눔(사용자 2026-11-18 물음 — '조 제목만 홀로 남지 않게, 조와 조 사이에서'): 조 줄과 그 조의 항·호·목은
+        # 마지막 줄 앞까지 '다음 문단과 함께'. v2.14는 법령 이름 줄에만 걸어 조 제목만 쪽 끝에 남았음(검토보고 4쪽)
+        for (p, kind), nxt in zip(kinds, kinds[1:] + [(None, None)]):
+            if kind in ("article", "item") and nxt[1] == "item" and nxt[0] is res[res.index(p) + 1]:
+                p.set("paraPrIDRef", self.hedit.para_keep_next(p.get("paraPrIDRef")))
+        if names or lines:
+            self.warn(f"참고 근거법령 {names}개 법령·조문 {lines}줄은 상자·머리 기호 없이 원문 번호로 두었습니다"
+                      "(법령 이름은 굵게, 항·호·목은 번호대로 들임 — 사용자 원칙).")
+        return res
+
+    def case_refs(self, out):
+        """판례·해석례 발췌 블록(계획 {"case": "대법원 … 판결", "gist": […]} / {"interp": "법제처 … 회신", "q": …, "reply": …,
+        "reason": …}, plan_text가 '- 머리 줄'과 '(판결요지) …' 줄로 펼침)을 참고 쪽 인용 모양으로(받은 요청 2026-11-22 15번):
+        - 머리 줄 '- 대법원 …'은 '-'를 내어 써서 '대법원' 앞끝선 = '(판결요지' 앞끝선 = 둘째 줄 자리(○ 글자 자리), 다음 줄과 함께
+        - (판결요지)·(질의)·(회신)·(이유) 줄은 가운데점 없이 그 자리에서, 둘째 줄도 같은 자리, 이름표는 글자 그대로
+        - 사건 묶음 사이(판례·유권해석 사이 포함) 반 줄, 글자는 본문 ○보다 1pt 작게, 줄 간격 160%
+        - 원문 인용이라 근거법령 조문처럼 자간으로만 끝선(줄 바꿈 넣기·끝 줄 내리기·벌어진 줄 알림 없음 — law_paras)."""
+        if not getattr(self, "case_paras", None):
+            return out
+        lay = Layout(self.styles, self.metrics)
+        x0, body_pt = None, None
+        for p in out:
+            t = para_text(p)
+            if not para_tables(p) and marker_level(t) == 2 and p not in self.case_paras:
+                pp = self.styles.para.get(p.get("paraPrIDRef"), {})
+                x0, body_pt = pp.get("left", 0) - pp.get("intent", 0), self._main_pt(p)
+                break
+        heads = 0
+        for p in out:
+            kind = self.case_paras.get(p)
+            if not kind:
+                continue
+            if body_pt is None:
+                body_pt = self._main_pt(p)
+            delta = body_pt - 1 - self._main_pt(p)
+            if delta:
+                for r in indexed_runs(p):
+                    r.set("charPrIDRef", self.hedit.char_size(r.get("charPrIDRef"), delta))
+            pp = self.styles.para.get(p.get("paraPrIDRef"), {})
+            x = x0 if x0 is not None else pp.get("left", 0) - pp.get("intent", 0)
+            pid = self.hedit.para_align(self.hedit.para_line(p.get("paraPrIDRef"), CASE_LINE), "JUSTIFY")
+            size = self._main_pt(p)
+            if kind == "head":
+                text = para_text(p)
+                ws = len(text) - len(text.lstrip(" ⎵⍽"))
+                if ws:
+                    self._keep_chars(p, ws, len(text))
+                k = len(split_marker(para_text(p))[0])
+                w = int(round(sum(c[1] for c in lay.chars(p)[:k])))
+                pid = self.hedit.para_hang(self.hedit.para_margin(pid, "left", max(0, x - w)), w)
+                pid = self.hedit.para_margin(pid, "prev", int(round(size * CASE_LINE / 2)))  # 사건 묶음 사이 반 줄
+                pid = self.hedit.para_keep_next(pid)
+                heads += 1
+            else:
+                pid = self.hedit.para_hang(self.hedit.para_margin(pid, "left", x), 0)
+                pid = self.hedit.para_margin(pid, "prev", 100)
+            p.set("paraPrIDRef", pid)
+            self.law_paras[p] = x
+        if heads:
+            self.warn(f"판례·해석례 발췌 {heads}건은 인용 모양으로 두었습니다(머리 줄의 '-'를 내어 써서 요지와 앞끝선을 맞춤, 이름표는 글자 그대로, "
+                      f"{body_pt - 1:g}pt·줄 간격 {CASE_LINE}%, 사건 사이 반 줄).")
+        return out
+
+    def _body_font_of(self, p):
+        return next((self.styles.char.get(r.get("charPrIDRef"), {}).get("font") for r in indexed_runs(p) if run_text(r).strip()), None)
+
+    def find_law_paras(self):
+        """이미 만든 문서(검사만)에서 상자 없는 참고 근거법령 조문 줄을 다시 알아본다 — law_refs가 만들 때만 채우는 표시라 검사만이
+        조문을 보통 본문처럼 맞춰 보며 '한 줄 줄이기' 같은 지적을 따로 냈음(Codex 검토 2026-11-15). 기준 자리 = 왼쪽 여백 − 들임."""
+        in_law = False
+        for p in [x for x in self.sec if x.tag == T("hp:p")]:
+            if para_tables(p):
+                if self._is_ref_head(p):  # 근거법령·판례·해석례 발췌 참고(인용 글 — 만들기의 law_refs·case_refs와 같게)
+                    in_law = bool(re.search(r"법령|조문|법규|판례|해석|회신", self._ref_title(p)))
+                continue
+            text = para_text(p)
+            if not in_law or not text.strip():
+                continue
+            pre, mark, _ = split_marker(text)
+            if (mark and (mark in "※*＊" or not re.match(r"[\d①-⑳㉑-㉟㊱-㊿가-힣(]", mark))) or text.lstrip().startswith(("「", "<", "〈", "《")):
+                continue  # 기호 줄·법령 이름 줄·※ 줄
+            pp = self.styles.para.get(p.get("paraPrIDRef"), {})
+            lvl = quote_indent(text)
+            self.law_paras[p] = int(round(pp.get("left", 0) - (lvl or 0) * self._main_pt(p) * 100))
+
+    def _main_pt(self, p):
+        """문단에서 글자 수가 가장 많은 글자 크기(pt)."""
+        cnt = {}
+        for r in indexed_runs(p):
+            n = len(run_text(r).strip())
+            if n:
+                s = self.styles.char.get(r.get("charPrIDRef"), {}).get("size", 10)
+                cnt[s] = cnt.get(s, 0) + n
+        return max(cnt, key=cnt.get) if cnt else 10
+
+    def ref_bullets(self, out):
+        """참고 머리표 바로 아래 ○ 한 줄 설명은 쓰지 않는 형식이다(사용자 의견 2026-10-31) — 설명은 표 아래 ※로."""
+        hits = []
+        for a, b in zip(out, out[1:]):
+            tables = para_tables(a)
+            if (tables and tables[0].get("rowCnt") == "1" and tables[0].get("colCnt") != "1"
+                    and not para_tables(b) and marker_level(para_text(b)) == 2):
+                hits.append(para_text(b).strip()[:16])
+        if hits:
+            self.warn(f"참고 머리표 바로 아래 ○ 줄 {len(hits)}개({', '.join(hits)}): 참고 쪽에는 ○ 한 줄 설명을 쓰지 않습니다 "
+                      "— 표·내용을 바로 두고 설명은 표 아래 ※로 옮기세요.")
+
+    def law_source_lines(self, out):
+        """참고 근거법령 아래 '※ 출처 : 국가법령정보센터(…)' 줄은 쓰지 않는다(받은 요청 2026-11-22 14번 → 사용자 '모든 문서에서 뺌') —
+        계획에 있으면 알린다(표 자료 출처 '※ 자료 : …'는 그대로). 찾은 수."""
+        hits = [p for p in out if not para_tables(p)
+                and re.match(r"[ ⎵⍽]*※?[ ⎵⍽]*출[ ⎵⍽]*처[ ⎵⍽]*[:：].*(법령정보|법제처|law\.go\.kr)", para_text(p))]
+        if hits:
+            self.warn(f"참고 근거법령 아래 ‘※ 출처’ 줄 {len(hits)}개 — 출처 줄은 쓰지 않습니다(사용자 원칙 2026-11-22). 계획에서 빼 주세요.")
+        return len(hits)
+
+    def ref_head_gaps(self, out):
+        """참고 머리표 바로 밑에서 글이 시작하면 머리표와 첫 줄 사이를 그 글 줄 높이의 반 줄 이상 띄운다 — 밑에 표(·■ 제목·단위 줄)가
+        오면 지금처럼 붙여 둠(받은 요청 2026-11-22 13번, 사용자 '참고 상자 아래 표상자가 붙고 그 안에 본문이 붙으면 가까워도 좋지만,
+        참고상자 아래 바로 글이 전개될 경우 공간이 어느정도 있어야'). 머리표 문단 아래 여백 + 표 바깥 아래 여백 + 글 위 여백이
+        반 줄보다 작을 때만 글 위 여백을 늘린다. 늘린 곳 수."""
+        n = 0
+        for a, b in zip(out, out[1:]):
+            if not self._is_ref_head(a) or para_tables(b) or is_blank(b):
+                continue
+            text = para_text(b)
+            if UNIT_RE.match(text) or text.lstrip().startswith(TABLE_TITLE_MARK):
+                continue
+            pa = self.styles.para.get(a.get("paraPrIDRef"), {})
+            pb = self.styles.para.get(b.get("paraPrIDRef"), {})
+            om = para_tables(a)[0].find(T("hp:outMargin"))
+            have = pa.get("next", 0) + (int(om.get("bottom", "0")) if om is not None else 0) + pb.get("prev", 0)
+            line = pb.get("line", 160) if pb.get("line_type", "PERCENT") == "PERCENT" else 160
+            half = int(round(self._main_pt(b) * line / 2))  # 1/100pt — 글자 크기 × 줄 간격의 반
+            if have < half:
+                b.set("paraPrIDRef", self.hedit.para_margin(b.get("paraPrIDRef"), "prev", pb.get("prev", 0) + half - have))
+                n += 1
+        if n:
+            self.warn(f"참고 머리표 바로 밑에서 글이 시작하는 {n}곳은 머리표와 첫 줄 사이를 반 줄 띄웠습니다(밑에 표가 오면 붙여 둠).")
+        return n
+
+    def table_titles(self, out):
+        """본문 자료 표(머리 줄이 있는 여러 줄·여러 칸 표)는 ■ 제목을 단다(사용자 원칙 2026-11-04 '이 표는 제목이 없군요
+        앞으로는 ■ 네모로 제목을 지어줍시다'). 제목 없는 표를 '고쳐야 함'으로 알린다 — 계획의 표 블록에 "title"을 넣으면
+        표 위 왼쪽에 ■ 줄이 붙는다. 참고 쪽 표도 본다(참고 머리표는 쪽 제목일 뿐, 사용자 2026-11-05) — 참고 자체가 표 하나인
+        곳은 참고 머리표 제목이 곧 표 제목이라 묻지 않는다(사용자 2026-11-05)."""
+        missing = []
+        sole = self._head_titled(out)
+        for k, p in enumerate(out):
+            tables = para_tables(p)
+            if not tables:
+                continue
+            if self._is_ref_head(p) or p in sole:
+                continue  # 참고 머리표는 쪽 제목 — 그 아래 표도 저마다 ■ 제목(사용자 2026-11-05), 참고 자체가 표면 머리표 제목
+            tbl = tables[0]
+            if tbl in self.flow_tables or not Fitter._is_data_table(tbl) or self._has_image(tbl):
+                continue  # 그림 상자(캡처·그래프)는 머리 칸·[그림 N] 줄이 제목 — ■ 제목을 묻지 않음
+            j = k - 1
+            while j >= 0 and not para_tables(out[j]) and UNIT_RE.match(para_text(out[j])):
+                j -= 1
+            if j >= 0 and is_table_title(out[j], out[j + 1:j + 5]):
+                continue
+            g = table_grid(tbl)
+            head = next((para_text(cp).replace(FW, " ").strip()[:8] for *_, tc in g for cp in cell_paras(tc)
+                         if para_text(cp).strip()), "")
+            missing.append(head)
+        if missing:
+            self.warn(f"표 제목이 없습니다 — 표 {len(missing)}개(" + ", ".join(f"‘{t}…’" for t in missing[:3])
+                      + (" 등" if len(missing) > 3 else "") + "): 표 블록에 \"title\": \"○○ 현황\"을 넣으면 표 위 왼쪽에 "
+                      "■ 제목이 붙습니다(단위 줄은 그 아래 오른쪽).", level="fix", kind="table_title")
+
+    def basis_notes(self, out):
+        """근거법령에는 부연설명을 달지 않는다(사용자 원칙 2026-11-04): Ⅰ. 근거법령 장·□ 근거법령 묶음 안의 -·※·* 줄을
+        알린다 — 법령 이름·조항만 ○ 하나씩 쓰고, 설명은 빼거나 그 내용을 쓰는 □(사업개요·추진배경 등)로 옮긴다.
+        - 줄이 하위 법령(「…」)이면 ○로 올린다. 참고 쪽(참고 머리표부터)은 보지 않는다."""
+        notes, laws, inside, roman = [], [], False, False
+        for k, p in enumerate(out):
+            if para_tables(p):
+                if self._is_ref_head(p):
+                    break
+                continue
+            if is_table_title(p, out[k + 1:k + 5]):
+                continue
+            text = para_text(p).replace(FW, " ").replace("⍽", " ")
+            _, mark, body = split_marker(text)
+            if not mark:
+                continue
+            lv = marker_level(text)
+            if lv == 1:
+                is_roman = mark[0] in ROMAN
+                if inside and (is_roman or not roman):
+                    inside = False
+                if BASIS_LAW_TITLE_RE.match(body.replace("**", "").strip()):
+                    inside, roman = True, is_roman
+                continue
+            if inside and lv >= 3:
+                body = body.replace("**", "").strip()
+                (laws if body.startswith("「") else notes).append(body[:16])
+        if not notes and not laws:
+            return
+        msg = "근거법령에는 부연설명을 달지 않습니다(사용자 원칙) — 법령 이름·조항만 ○ 하나씩"
+        if notes:
+            msg += (f": 설명 줄 {len(notes)}개(" + ", ".join(f"‘{t}…’" for t in notes[:3]) + (" 등" if len(notes) > 3 else "")
+                    + ")는 빼거나 그 내용을 쓰는 □(사업개요·추진배경 등)로 옮기세요")
+        if laws:
+            msg += ("; " if notes else ": ") + f"- 줄의 하위 법령 {len(laws)}개(" + ", ".join(f"‘{t}…’" for t in laws[:3]) + ")는 ○로 올리세요"
+        self.warn(msg + ".", level="fix", kind="basis")
+
+    # ------------------------------------------------------------ 부연설명 괄호 작게
+    def small_notes(self):
+        """설명 문단은 설명하는 글(바로 위 □·○·-·· 문단)보다 작게(사용자 원칙 2026-11-02): * 풀이·※ 참고 모두 **2pt**
+        작게(v1.1). 설명 문단은 아래 간격을 3pt 이상 둬 작아진 글자 뒤 줄이 붙어 보이지 않게 한다. 표 바로 뒤 ※·*는 fit이
+        표 글자 기준(1pt 작게)으로 맞추므로 건너뛴다. 조각마다 크기 차이(작게 한 괄호 등)는 그대로 두고 문단 전체를 같은
+        만큼 옮긴다. 견본이 이미 그만큼 작으면 그대로."""
+        def main_size(p):
+            sizes = [round(self.styles.char.get(r.get("charPrIDRef"), {}).get("size", 0)) for r in indexed_runs(p)
+                     if r.find(T("hp:t")) is not None and run_text(r).strip()
+                     and not self.styles.char.get(r.get("charPrIDRef"), {}).get("superscript")]
+            sizes = [s for s in sizes if s]
+            return max(set(sizes), key=sizes.count) if sizes else 0
+
+        changed, gapped, parent, after_table = 0, 0, 0, False
+        for p in self.sec:
+            if p.tag != T("hp:p") or p in self.law_notes:  # 참고 근거법령 아래 ※ 출처는 law_refs가 조문 기준으로 맞춤
+                continue
+            if para_tables(p):
+                after_table = True
+                continue
+            text = para_text(p)
+            if not text.strip():
+                continue
+            lvl = marker_level(text)
+            if lvl == 4:
+                if after_table or not parent:
+                    continue
+                is_star = split_marker(text)[1] in "*＊"
+                cur = main_size(p)
+                delta = (parent - (NOTE_STAR_PT if is_star else NOTE_REF_PT)) - cur
+                if cur and delta:
+                    for r in indexed_runs(p):
+                        if r.find(T("hp:t")) is None:
+                            continue
+                        r.set("charPrIDRef", self.hedit.char_size(r.get("charPrIDRef"), delta))
+                    changed += 1
+                if True:  # * 풀이·※ 참고 모두(v1.1)
+                    pid = p.get("paraPrIDRef")
+                    if self.styles.para.get(pid, {}).get("next", 0) < NOTE_STAR_GAP:
+                        p.set("paraPrIDRef", self.hedit.para_margin(pid, "next", NOTE_STAR_GAP))
+                        gapped += 1
+                continue
+            after_table = False
+            if lvl in (1, 2, 3):
+                parent = main_size(p) or parent
+        if changed:
+            self.warn(f"*·※ 설명 {changed}문단을 설명하는 글보다 작게(* {NOTE_STAR_PT}pt·※ {NOTE_REF_PT}pt) 했습니다(견본이 달랐음).")
+        if gapped:
+            self.warn(f"*·※ 설명 {gapped}문단 아래를 {NOTE_STAR_GAP // 100}pt 띄웠습니다(작은 글자 뒤 줄이 붙어 보이지 않게).")
+
+    def small_parens(self, delta):
+        """○·- 항목 글 속 부연설명 괄호(괄호와 그 안의 글)를 delta pt 작게 한다(사용자 원칙, 2026-10-31).
+        첫머리 괄호 이름표 (현황)·이름의 일부 (안)·요일 (금)·「」 안의 괄호와 굵은·위 첨자 조각은 그대로 둔다."""
+        changed = 0
+        for p in self.sec:
+            if p.tag != T("hp:p") or para_tables(p):
+                continue
+            text = para_text(p)
+            # 참고 근거법령 조문 줄은 괄호를 줄이지 않는다 — 원문 그대로 본문과 같은 크기(사용자 2026-11-18 '괄호안에 글자도 동일
+            # 사이즈처리(줄이기 없음)' — v2.14까지는 조 제목 괄호까지 2pt 작게 했음)
+            if marker_level(text) not in (2, 3) or p in self.law_paras:
+                continue
+            spans, depth, quote, start = [], 0, 0, None
+            for i in range(_base_head(text), len(text)):
+                ch = text[i]
+                if ch == "「":
+                    quote += 1
+                elif ch == "」":
+                    quote = max(0, quote - 1)
+                elif ch == "(" and not quote:
+                    if depth == 0:
+                        start = i
+                    depth += 1
+                elif ch == ")" and depth and not quote:
+                    depth -= 1
+                    if depth == 0 and not SKIP_PAREN_RE.fullmatch(text[start:i + 1]):
+                        spans.append((start, i + 1))
+            if not spans:
+                continue
+            pos = 0
+            big = max((self.styles.char.get(r.get("charPrIDRef"), {}).get("size", 0) for r in indexed_runs(p)), default=0)
+            for r in indexed_runs(p):
+                t = run_text(r)
+                a, b = pos, pos + len(t)
+                pos = b
+                c = self.styles.char.get(r.get("charPrIDRef"), {})
+                if (c.get("bold") or c.get("superscript") or c.get("size", 0) < big
+                        or r.find(T("hp:t")) is None or len(r) != 1):
+                    continue  # 이름표·위 첨자·이미 작은 조각은 그대로
+                cuts = sorted({x - a for s, e in spans for x in (s, e) if a < x < b} | {0, len(t)})
+                pieces = [(t[x:y], any(s <= a + x and a + y <= e for s, e in spans)) for x, y in zip(cuts, cuts[1:])]
+                if not any(small for _, small in pieces):
+                    continue
+                cid = self.hedit.char_size(r.get("charPrIDRef"), -delta)
+                parent = r.getparent()
+                at = list(parent).index(r)
+                for k, (s, small) in enumerate(pieces):
+                    nr = self._mk(r, s)
+                    if small:
+                        nr.set("charPrIDRef", cid)
+                    parent.insert(at + 1 + k, nr)
+                parent.remove(r)
+                changed += 1
+        if changed:
+            self.warn(f"부연설명 괄호를 {delta}pt 작게 했습니다(○·- 항목 {changed}곳 — 첫머리 이름표·(안)·요일은 그대로).")
+
+    # ------------------------------------------------------------ 따옴표 붙이기
+    def _tight_deltas(self, text, font):
+        """글자마다 줄일 자간(%): 한 글자 폭이라 벌어져 보이는 따옴표·낫표·가운데점을 붙인다(빈 쪽만큼, 표시는 겹치지 않게).
+        - 닫는 ’ ”·」: 그 글자를 -50%(오른쪽 빈 곳을 줄임)
+        - 여는 ‘ “·「: 표시가 칸 오른쪽이라 그 글자를 줄이면 다음 글자가 표시를 덮음 → 앞 글자를 줄임
+          (「 앞이 낱말이면 -40%, 빈칸이면 빈칸 -50%·그 앞 글자 -20%. 고정폭 빈칸·여는 괄호 뒤는 그대로 — 머리 기호·이름표 뒤 줄 맞춤 유지)
+        - 낱말 사이 ·ㆍ(홍보·안내): 앞 글자와 점을 -25%씩(양쪽 빈 곳을 같게 줄임). 머리 기호로 쓴 '· '는 그대로"""
+        d = [0] * len(text)
+        quotes = self.metrics.em(font, "’") >= 0.9
+        tight = font in TIGHT_FONTS
+        for i, ch in enumerate(text):
+            prev = text[i - 1] if i > 0 else None
+            nxt = text[i + 1] if i + 1 < len(text) else None
+            if quotes and ch in QUOTES:
+                if ch not in OPEN_QUOTES:
+                    d[i] -= 50
+                elif prev is not None and prev not in QUOTES:
+                    d[i - 1] -= 50  # 조각 첫 글자인 여는 따옴표는 줄이지 않고 둔다
+            elif tight and ch == "」":
+                d[i] -= 50
+            elif tight and ch == "「" and prev is not None and prev not in FW + "([{<〈《“‘「":
+                d[i - 1] -= 50 if prev == " " else 40
+                if prev == " " and i > 1 and text[i - 2] not in " " + FW:
+                    d[i - 2] -= 20  # 빈칸은 -50%까지만 줄어 앞 글자도 조금(60pt 실측: 등 「 사이 0.84 → 0.6글자)
+            elif tight and ch in MID_DOTS and any(x is not None and x in MID_DOTS for x in (prev, nxt)):
+                # 생략 표시 ···(중점 세 개, 사용자 2026-11-15): 한 글자 폭 점이라 · · ·로 벌어짐 → 점마다 -50%(점 사이 반 글자),
+                # 글자에 붙여 쓴 첫 점은 앞 글자도 -25%(낱말 사이 가운데점과 같게)
+                d[i] -= 50
+                if prev is not None and prev not in MID_DOTS + " " + FW:
+                    d[i - 1] -= 25
+            elif tight and ch in MID_DOTS and prev not in (None, " ", FW) and nxt not in (None, " ", FW):
+                d[i - 1] -= 25
+                d[i] -= 25
+        return d
+
+    def tighten_quotes(self):
+        """따옴표(’ ”)·낫표(「」)·가운데점(·)이 한 글자 폭인 글꼴(휴먼명조)에서는 ’26.이 ’ 26.처럼, 「법」 등이 「 법」  등처럼,
+        홍보·안내가 홍보 · 안내처럼 벌어져 보인다. 빈 쪽 자간을 줄여 붙인다(사용자 원칙 1: 자간은 겹치지 않는 범위에서 조정,
+        낫표·가운데점은 사용자 요청 2026-11-01). 줄인 자간은 -50%를 넘지 않는다."""
+        mode = {}  # 문단 → 글자 수가 가장 많은 자간(이 단계가 줄인 조각을 알아보는 기준)
+        for r in list(self.sec.iter(T("hp:run"))):
+            text = run_text(r)
+            if r.find(T("hp:t")) is None or len(r) != 1 or not any(q in text for q in QUOTES + "「」" + MID_DOTS):
+                continue
+            c = self.styles.char.get(r.get("charPrIDRef"), {})
+            base = c.get("spacing", 0)
+            deltas = self._tight_deltas(text, c.get("font"))
+            if not any(deltas) or base <= -50:
+                continue
+            p = r.getparent()
+            if p not in mode:
+                count = {}
+                for x in para_runs(p):
+                    if x.find(T("hp:t")) is not None:
+                        sp = self.styles.char.get(x.get("charPrIDRef"), {}).get("spacing", 0)
+                        if sp >= PROFILE["spacing_min_pct"]:  # 이 단계가 줄인 조각(-25% 등)은 빼고 잼 — '중·동·서·남·북'처럼 줄인 글자가 많으면 -25 → -50이 됐음(평가 2026-11-09)
+                            count[sp] = count.get(sp, 0) + len(run_text(x))
+                mode[p] = max(count, key=count.get) if count else max(base, 0)
+            # 문단 보통 자간보다 이미 좁은 조각은 이 단계가 줄인 것 — 보통 자간에서 다시 재어 더 줄일 때만(되풀이해도 같게, 2026-11-04)
+            ref = max(base, mode[p])
+            cids = [self.hedit.char_spacing(r.get("charPrIDRef"), max(-50, ref + dl)) if dl and ref + dl < base else None
+                    for dl in deltas]
+            if not any(cids):
+                continue
+            pieces = []
+            for ch, cid in zip(text, cids):
+                if pieces and pieces[-1][1] == cid:
+                    pieces[-1] = (pieces[-1][0] + ch, cid)
+                else:
+                    pieces.append((ch, cid))
+            parent = r.getparent()
+            at = list(parent).index(r)
+            for k, (t, cid) in enumerate(pieces):
+                nr = self._mk(r, t)
+                if cid:
+                    nr.set("charPrIDRef", cid)
+                parent.insert(at + 1 + k, nr)
+            parent.remove(r)
+        self._tight_year_marks()
+
+    def _tight_year_marks(self):
+        """괄호·물결 바로 뒤 연도 표시 ’('(’26년 예산)', '’26.~’27.'): 휴먼명조 ’는 한 글자 폭에 점이 왼쪽에서 0.2글자 떨어져
+        '( ’26년'처럼 벌어져 보인다(사용자 2026-11-05 '괄호안에 ’26년 이런식으로 연도를 나타내면 간격이 넓다'). ’ 오른쪽 빈 곳은
+        tighten_quotes가 줄이고, 왼쪽은 앞 글자(괄호·물결)의 자간을 YEAR_MARK_PREV만큼 줄여 ’를 당긴다 — 잉크가 겹치지 않는 만큼
+        (글꼴 실측). 조각이 나뉘어 있어도 문단 글자 차례로 보고, 문단 보통 자간에서 재어 되풀이해도 같게. 바꾼 곳 수."""
+        n = 0
+        for p in self.sec.iter(T("hp:p")):
+            chars, count = [], {}
+            for r in para_runs(p):
+                if r.find(T("hp:t")) is None or len(r) != 1:
+                    chars.append((None, 0, ""))  # 조종·그림 조각은 끊김
+                    continue
+                sp = self.styles.char.get(r.get("charPrIDRef"), {}).get("spacing", 0)
+                for k, ch in enumerate(run_text(r)):
+                    chars.append((r, k, ch))
+                    count[sp] = count.get(sp, 0) + 1
+            if not count:
+                continue
+            mode = max(count, key=count.get)
+            hits = {}
+            for j in range(len(chars) - 2):
+                r, k, ch = chars[j]
+                r2, _, ch2 = chars[j + 1]
+                if r is None or r2 is None or ch not in YEAR_MARK_PREV or ch2 != "’" or not chars[j + 2][2].isdigit():
+                    continue
+                c = self.styles.char.get(r.get("charPrIDRef"), {})
+                if c.get("font") not in TIGHT_FONTS or self.metrics.em(self.styles.char.get(r2.get("charPrIDRef"), {}).get("font"), "’") < 0.9:
+                    continue
+                want = max(-50, mode + YEAR_MARK_PREV[ch])
+                if c.get("spacing", 0) > want:
+                    hits.setdefault(r, {})[k] = want
+            for r, ks in hits.items():
+                text = run_text(r)
+                pieces = []
+                for k, ch in enumerate(text):
+                    cid = self.hedit.char_spacing(r.get("charPrIDRef"), ks[k]) if k in ks else None
+                    if pieces and pieces[-1][1] == cid:
+                        pieces[-1] = (pieces[-1][0] + ch, cid)
+                    else:
+                        pieces.append((ch, cid))
+                parent = r.getparent()
+                at = list(parent).index(r)
+                for k, (t, cid) in enumerate(pieces):
+                    nr = self._mk(r, t)
+                    if cid:
+                        nr.set("charPrIDRef", cid)
+                    parent.insert(at + 1 + k, nr)
+                parent.remove(r)
+                n += len(ks)
+        return n
+
+    # ------------------------------------------------------------ 번호·빈 줄
+    def _proto_of(self, b):
+        if isinstance(b, dict) and isinstance(b.get("like"), int) and 0 <= b["like"] < len(self.protos):
+            return self.protos[b["like"]]
+        return None
+
+    def number_items(self, blocks):
+        """번호 머리 기호(Ⅰ. 1. 가. ①)는 견본 번호를 그대로 쓰지 않고 차례로 매긴다. 글에 번호가 있으면 그것을 쓴다.
+        위 갈래 번호가 나오면 아래 갈래 번호는 다시 1부터."""
+        count = {}
+        for n, b in enumerate(blocks):
+            proto = self._proto_of(b)
+            if proto is None or "text" not in b or para_tables(proto) or b.get("marker") is False:
+                continue
+            _, mark, _ = split_marker(para_text(proto))
+            fam = number_family(mark)
+            if not fam:
+                continue
+            for f in FAMILIES[FAMILIES.index(fam) + 1:]:
+                count.pop(f, None)
+            count[fam] = count.get(fam, 0) + 1
+            _, um, _ = split_marker(b["text"])
+            if number_family(um) != fam:
+                blocks[n] = dict(b, text=f"{number_mark(fam, count[fam], mark)} {b['text']}")
+
+    def join_titles(self, blocks):
+        """네 글자 제목(두 글자 + 두 글자)은 띄어 쓰지 않는다: □ 추진 배경 → □ 추진배경, (추진 방향) → (추진방향).
+        □·Ⅰ. 제목 글 전체와, ○·- 항목 첫머리 괄호 이름표에만 쓴다(사용자 원칙)."""
+        four = re.compile(r"^([가-힣]{2}) ([가-힣]{2})$")
+        joined = 0
+        for n, b in enumerate(blocks):
+            proto = self._proto_of(b)
+            if proto is None or "text" not in b or para_tables(proto):
+                continue
+            text = b["text"]
+            lv = marker_level(para_text(proto))
+            upre, umark, ubody = split_marker(text)
+            body = ubody if umark else text
+            if lv == 1:
+                m = four.match(body.strip())
+                if m:
+                    blocks[n] = dict(b, text=upre + m.group(1) + m.group(2))
+                    joined += 1
+            elif lv in (2, 3):
+                lm = LABEL_RE.match(body)
+                if lm and four.match(lm.group("core").strip()):
+                    core = lm.group("core").strip().replace(" ", "")
+                    new_body = body[:lm.start("core")] + core + body[lm.end("core"):]
+                    blocks[n] = dict(b, text=upre + new_body)
+                    joined += 1
+        if joined:
+            self.warn(f"네 글자 제목·이름표 {joined}곳을 붙여 썼습니다(예: 추진 배경 → 추진배경).")
+
+    def table_notes(self, blocks):
+        """표 바로 뒤 ※ 줄은 표 왼쪽 끝선에서 시작하는 ※ 모양(견본에서 왼쪽 여백이 0인 ※ 문단)으로 바꾼다
+        (사용자 원칙 2026-10-31: 표 밑 ※는 표 왼쪽 끝선에 맞추고 본문보다 2pt 작게)."""
+        notes = [i for i, p in enumerate(self.protos)
+                 if not para_tables(p) and split_marker(para_text(p))[1] == "※"
+                 and self.styles.para.get(p.get("paraPrIDRef"), {}).get("left", 0) == 0]
+        if not notes:
+            return
+        target, moved, prev, after_table = notes[0], 0, None, False
+        for n, b in enumerate(blocks):
+            proto = self._proto_of(b)
+            if proto is None:
+                continue
+            is_note = not para_tables(proto) and split_marker(para_text(proto))[1] == "※"
+            # 표 바로 뒤 ※ 줄과, 그 뒤로 이어지는 ※ 줄 모두(한 줄만 바꾸면 들여쓰기가 섞임)
+            after_table = is_note and (after_table or (prev is not None and para_tables(prev)
+                                                       and para_tables(prev)[0].get("rowCnt") != "1"))
+            if after_table and b["like"] != target:
+                blocks[n] = dict(b, like=target)
+                moved += 1
+            prev = proto
+        if moved:
+            self.warn(f"표 바로 뒤 ※ {moved}줄은 표 왼쪽 끝선에서 시작하는 ※ 모양(견본 {target}번)으로 넣었습니다.")
+
+    def table_units(self, blocks):
+        """표 위 기준·단위 줄 '(기준 : ’26.9월) (단위 : 백만원)'(사용자 원칙 2026-11-01): 표 오른쪽 끝에 맞추고 표 글자보다
+        2pt 작게. 표 블록의 "unit"은 표 바로 앞 줄로 넣고, 표 바로 앞 글 블록이 이 꼴이면 견본의 기준·단위 줄 모양
+        (기본 양식 18번)으로 바꾼다. 견본에 그 모양이 없으면 표 아래 ※ 모양을 빌려 오른쪽 정렬로. 크기는 fit이 맞춘다."""
+        target = next((i for i, p in enumerate(self.protos)
+                       if not para_tables(p) and UNIT_RE.match(para_text(p))), None)
+        fallback = None
+        if target is None:
+            fallback = next((i for i, p in enumerate(self.protos)
+                             if not para_tables(p) and para_text(p).strip()
+                             and self.styles.para.get(p.get("paraPrIDRef"), {}).get("left", 0) == 0), None)
+
+        def unit_block(b, text):
+            if target is not None:
+                return dict(b, like=target, text=text)
+            return dict(b, like=fallback, text=text, marker=False, _align="RIGHT")
+
+        out, made, titled = [], 0, 0
+        for b in blocks:
+            proto = self._proto_of(b)
+            if proto is not None and para_tables(proto) and isinstance(b, dict):
+                title = str(b.get("title") or "").strip()
+                if title and "flow" not in b and (target is not None or fallback is not None):
+                    # 표 제목(사용자 원칙 2026-11-04): 표 위 왼쪽 '■ 제목' 줄 — 기준·단위 줄 모양을 빌려 왼쪽 정렬로 넣고,
+                    # 글꼴·크기·줄 간격은 fit이 표에 맞춘다(표 글꼴 굵게, 표 글자 크기)
+                    title = title.lstrip(TABLE_TITLE_MARK + " ")
+                    out.append(dict(unit_block({"_src": b.get("_src")}, f"{TABLE_TITLE_MARK} {title}"), _align="LEFT",
+                                    marker=False))
+                    titled += 1
+                if "flow" not in b:
+                    b = {k: v for k, v in b.items() if k != "title"}
+                if b.get("unit") and (target is not None or fallback is not None):
+                    out.append(unit_block({"_src": b.get("_src")}, b["unit"]))
+                    made += 1
+                elif out and isinstance(out[-1], dict) and "text" in out[-1] and UNIT_RE.match(out[-1]["text"]) \
+                        and out[-1].get("like") not in (target, None) and (target is not None or fallback is not None):
+                    out[-1] = unit_block(out[-1], out[-1]["text"])
+                    made += 1
+                b = {k: v for k, v in b.items() if k != "unit"}
+            out.append(b)
+        if titled:
+            self.warn(f"표 제목 {titled}개를 표 위 왼쪽에 ■ 줄로 넣었습니다(단위 줄은 그 아래 오른쪽).")
+        if made:
+            where = f"견본 {target}번" if target is not None else f"견본 {fallback}번을 오른쪽 정렬로"
+            self.warn(f"표 위 기준·단위 줄 {made}개를 표 오른쪽 끝에 맞춘 모양({where})으로 넣었습니다.")
+        elif any(isinstance(b, dict) and b.get("unit") for b in blocks):
+            self.warn("견본에 기준·단위 줄로 쓸 문단이 없어 표 위 \"unit\"을 넣지 못했습니다.", level="fix")
+        return out
+
+    def _block_spacer(self):
+        """□ 블록 사이에 둘 '한 줄 빈 줄' 견본: □ 바로 앞의 빈 문단, 없으면 가장 높은 빈 문단."""
+        def blank(p):
+            return is_blank(p)
+        before = [i - 1 for i, p in enumerate(self.protos)
+                  if i > 0 and marker_level(para_text(p)) == 1 and blank(self.protos[i - 1])]
+        if before:
+            return max(set(before), key=before.count)
+        blanks = [i for i, p in enumerate(self.protos) if blank(p)]
+        if not blanks:
+            return None
+        sizes = {i: max((self.styles.char.get(r.get("charPrIDRef"), {}).get("size", 0)
+                         for r in para_runs(self.protos[i])), default=0) for i in blanks}
+        return max(blanks, key=lambda i: sizes[i])
+
+    def space_blocks(self, blocks):
+        """□ 블록·Ⅰ. 장 앞에 한 줄 빈 줄을 둔다(사용자 원칙 9). 계획에 이미 빈 줄이 있거나 바로 앞이 장 제목이면 두지 않는다."""
+        sp = self._block_spacer()
+        if sp is None:
+            return blocks
+        out = []
+        for b in blocks:
+            proto = self._proto_of(b)
+            if (proto is not None and out and not para_tables(proto) and marker_level(para_text(proto)) == 1
+                    and not b.get("page_break")):
+                prev = self._proto_of(out[-1])
+                if prev is not None:
+                    prev_blank = is_blank(prev) and "text" not in out[-1]
+                    mark = split_marker(para_text(prev))[1]
+                    prev_chapter = bool(mark) and mark[0] in ROMAN and "text" in out[-1]  # 기호 없는 글(요약 상자 등)은 장 제목 아님
+                    if not prev_blank and not prev_chapter:
+                        out.append({"like": sp})
+            out.append(b)
+        return out
+
+    # ------------------------------------------------------------ 근거법령 1번
+    def _is_basis(self, text):
+        """근거법령 ○인가: 괄호 이름표에 근거·법령이 들어 있음((추진근거)·(평가근거)·(근  거)·(관계법령))."""
+        body = split_marker(text)[2].replace("**", "").strip()
+        m = re.match(r"\(([^)]{1,12})\)", body)
+        return bool(m) and bool(BASIS_RE.search(m.group(1)))
+
+    def _is_basis_block(self, b):
+        """계획 블록 글이 근거법령 ○인가 — 글에 쓴 머리 기호를 떼고 본다(plan-format: 기호까지 써도 떼어 냄, 평가 2026-11-09)."""
+        return self._is_basis("○ " + self._bare(b["text"]))
+
+    @staticmethod
+    def _bare(text):
+        _, mark, body = split_marker(text)
+        return body if mark else text
+
+    def _basis_no_heads(self, blocks, start, ref, level, moved, missing):
+        """□·Ⅰ. 제목이 없는 계획: 첫 ○가 근거인지 본다 — 말없이 건너뛰지 않음(평가 2026-11-09). ○도 없으면 자리를 확인하지 못했다고 알림."""
+        items = [n for n in range(start, ref) if level.get(n) == 2]
+        if not items:
+            self.warn("근거법령 자리를 확인하지 못했습니다 — □·Ⅰ. 제목과 ○ 줄이 없는 계획입니다(근거법령은 늘 1번 — 사용자 원칙).")
+            return self._basis_report(blocks, moved, missing)
+        if self._is_basis_block(blocks[items[0]]):
+            return self._basis_report(blocks, moved, missing)
+        basis = next((n for n in items if self._is_basis_block(blocks[n])), None)
+        if basis is None:
+            missing.append(f"첫 ○ ‘{self._bare(blocks[items[0]]['text'])[:10]}’")
+            return self._basis_report(blocks, moved, missing)
+        stop = next((k for k in items if k > basis), ref)
+        moved.append(f"○ ‘{self._bare(blocks[basis]['text'])[:10]}’를 맨 앞 ○로")
+        blocks = blocks[:items[0]] + blocks[basis:stop] + blocks[items[0]:basis] + blocks[stop:]
+        return self._basis_report(blocks, moved, missing)
+
+    def _renumber_chapters(self, blocks, start, ref):
+        """근거 장을 옮긴 뒤 글에 쓴 로마자 번호를 차례대로(옮긴 뒤 Ⅱ, Ⅰ, Ⅲ으로 남던 것 — 평가 2026-11-09). 고쳤으면 알림."""
+        k, changed = 0, []
+        for n in range(start, ref):
+            proto = self._proto_of(blocks[n])
+            if proto is None or para_tables(proto) or "text" not in blocks[n]:
+                continue
+            mark = split_marker(para_text(proto))[1]
+            if not mark or mark[0] not in ROMAN:
+                continue
+            k += 1
+            um = split_marker(blocks[n]["text"])[1]
+            if um and um[0] in ROMAN and um != number_mark("roman", k, um):
+                new = number_mark("roman", k, um)
+                blocks[n] = dict(blocks[n], text=blocks[n]["text"].replace(um, new, 1))
+                changed.append(f"{um} → {new}")
+        if changed:
+            self.warn("근거 장을 앞으로 옮기며 글에 쓴 장 번호를 차례대로 고쳤습니다(" + ", ".join(changed) + ").")
+
+    def basis_first(self, blocks):
+        """근거법령은 무조건 1번(사용자 원칙 2026-11-01 — 모든 공문·보고서·계획서에 근거법령이 옴):
+        - 표지 개요 상자: 첫 □ 아래 첫 ○
+        - 본문: 로마자 장이 있으면 Ⅰ.이 근거법령 장(Ⅰ. 근거법령 → ○ 「…법」 제○조), 없으면 첫 □가 근거법령
+          (□ 근거법령 → ○ 「…법」 제○조, 사용자 원칙 2026-11-03 — 근거법령이 들어가면 첫 □가 근거법령)
+        뒤에 있으면 그 장·□ 묶음째 맨 앞으로 옮기고, 다른 □ 안의 ○ (추진근거)이면 □ 근거법령으로 떼어 첫 □로 세우며,
+        없으면 알린다."""
+        moved, missing = [], []
+        # 표지 개요 상자(그림으로 시작하는 계획의 첫 쪽, 한 칸 상자 글이 □·○ 줄)
+        if self.starts_with_cover(blocks):
+            for b in blocks:
+                proto = self._proto_of(b)
+                if proto is not None and proto.find(".//" + T("hp:secPr")) is not None:
+                    break
+                text = b.get("text") if isinstance(b, dict) else None
+                if not isinstance(text, str) or proto is None or not para_tables(proto) or "□" not in text:
+                    continue
+                lines = text.split(NL)
+                heads = [i for i, ln in enumerate(lines) if marker_level(ln) == 1]
+                if not heads:
+                    continue
+                h = heads[0]
+                end = heads[1] if len(heads) > 1 else len(lines)
+                items = [i for i in range(h + 1, end) if marker_level(lines[i]) == 2]
+                basis = next((i for i in items if self._is_basis(lines[i])), None)
+                if basis is None:
+                    missing.append("표지 개요 상자")
+                elif items and basis != items[0]:
+                    stop = next((k for k in items if k > basis), end)  # 근거 ○ 묶음 = 근거 ○ ~ 다음 ○ 앞
+                    lines = lines[:items[0]] + lines[basis:stop] + lines[items[0]:basis] + lines[stop:]
+                    b["text"] = NL.join(lines)
+                    moved.append("표지 개요 상자")
+        # 본문: 로마자 장이 있으면 Ⅰ.이 근거법령 장, 없으면 첫 □가 근거법령
+        start = next((n for n, b in enumerate(blocks) if (p := self._proto_of(b)) is not None
+                      and p.find(".//" + T("hp:secPr")) is not None), 0)
+        ref = next((n for n in range(start, len(blocks)) if self._is_ref_proto(blocks[n])), len(blocks))
+        level = {}
+        for n in range(start, ref):
+            proto = self._proto_of(blocks[n])
+            if proto is None or para_tables(proto) or "text" not in blocks[n]:
+                level[n] = None
+                continue
+            mark = split_marker(para_text(proto))[1]
+            level[n] = 0 if not mark else (5 if mark[0] in ROMAN else marker_level(para_text(proto)))
+        heads = [n for n in range(start, ref) if level.get(n) in (1, 5)]
+        if not heads:
+            return self._basis_no_heads(blocks, start, ref, level, moved, missing)
+        first = heads[0]
+
+        def move(lo, hi, to):  # blocks[lo:hi]를 to 자리 앞으로
+            group = blocks[lo:hi]
+            rest = blocks[:lo] + blocks[hi:]
+            at = rest.index(blocks[to])
+            return rest[:at] + group + rest[at:]
+
+        if level[first] == 5:  # 로마자 장 문서: Ⅰ. 근거법령
+            chapters = [n for n in heads if level[n] == 5]
+            if not BASIS_TITLE_RE.search(blocks[first]["text"]):
+                c = next((c for c in chapters if BASIS_TITLE_RE.search(blocks[c]["text"])), None)
+                if c is None:
+                    missing.append("Ⅰ. 근거법령 장")
+                else:
+                    nxt = next((k for k in chapters if k > c), ref)
+                    blocks = move(c, nxt, first)
+                    moved.append(f"‘{blocks[first]['text'][:8]}’ 장을 Ⅰ.로")
+                    self._renumber_chapters(blocks, start, ref)
+            return self._basis_report(blocks, moved, missing)
+        if BASIS_TITLE_RE.search(blocks[first]["text"]):
+            return self._basis_report(blocks, moved, missing)  # □ 근거법령처럼 첫 □ 자체가 근거
+        later = next((h for h in heads[1:] if level[h] == 1 and BASIS_TITLE_RE.search(blocks[h]["text"])), None)
+        if later is not None:
+            nxt = next((h for h in heads if h > later), ref)
+            blocks = move(later, nxt, first)
+            moved.append(f"□ ‘{blocks[first]['text'][:10]}’")
+            return self._basis_report(blocks, moved, missing)
+        # 근거가 어느 □ 안의 ○ (추진근거)이면 □ 근거법령으로 떼어 첫 □로(사용자 원칙 2026-11-03: 근거법령이 들어가면 첫 □가 근거법령)
+        for h in (h for h in heads if level[h] == 1):
+            end = next((k for k in heads if k > h), ref)
+            items = [n for n in range(h + 1, end) if level.get(n) == 2]
+            basis = next((n for n in items if self._is_basis_block(blocks[n])), None)
+            if basis is None:
+                continue
+            stop = next((k for k in items if k > basis), end)
+            while stop - 1 > basis and "text" not in blocks[stop - 1] and level.get(stop - 1) == 0:
+                stop -= 1  # 묶음 끝의 빈 줄은 두고 감
+            group, dropped = self._basis_square(blocks, first, basis, stop, level)
+            moved.append(f"□ ‘{self._bare(blocks[h]['text'])[:10]}’ 안의 근거 ○를 □ 근거법령으로 떼어"
+                         + (f" — 법령 아닌 요약 ‘{dropped}’은 빼고 아래 법령 줄을 ○로" if dropped else ""))
+            blocks = blocks[:first] + group + blocks[first:basis] + blocks[stop:]
+            return self._basis_report(blocks, moved, missing)
+        missing.append(f"본문 첫 □ ‘{self._bare(blocks[first]['text'])[:10]}’")
+        return self._basis_report(blocks, moved, missing)
+
+    def _basis_square(self, blocks, first, basis, stop, level):
+        """'○ (추진근거) …' 묶음(blocks[basis:stop])을 '□ 근거법령 + ○ 법령 하나씩'으로 바꾼다. □ 모양은 첫 □를 빌림.
+        이름표 뒤 글은 ○로 두고, 아래 줄(-·번호)이 모두 법령(「)이면 ○로 올린다. 이때 이름표 뒤 글이 법령이 아닌
+        요약(예: '행정업무 규정·조례')이면 아래 법령 줄과 겹치므로 뺀다(돌려주는 두 번째 값)."""
+        head = blocks[basis]
+        body = split_marker("○ " + self._bare(head["text"]))[2]
+        lm = LABEL_RE.match(body)
+        rest = body[lm.end():].strip() if lm else body.strip()
+        kids = [n for n in range(basis + 1, stop) if level.get(n) == 3]
+        lift = bool(kids) and (not rest or all("「" in blocks[n].get("text", "") for n in kids))
+        dropped = rest if rest and lift and "「" not in rest else ""
+        out = [{"like": blocks[first]["like"], "text": "근거법령", "_src": head.get("_src")}]
+        if rest and not dropped:
+            out.append(dict(head, text=rest))
+        for n in range(basis + 1, stop):
+            b = blocks[n]
+            if lift and n in kids:
+                _, mark, kbody = split_marker(b["text"])
+                b = dict(b, like=head["like"], text=kbody if mark else b["text"])
+            out.append(b)
+        return out, dropped
+
+    def _basis_report(self, blocks, moved, missing):
+        if moved:
+            self.warn("근거법령을 맨 앞(1번)으로 옮겼습니다(" + ", ".join(moved) + ") — 근거법령은 무조건 1번(사용자 원칙).")
+        if missing:
+            self.warn(BASIS_MISSING.format(", ".join(missing)), level="fix", kind="basis")
+        return blocks
+
+    def _is_ref_proto(self, b):
+        proto = self._proto_of(b)
+        tables = para_tables(proto) if proto is not None else []
+        return bool(tables) and tables[0].get("rowCnt") == "1" and tables[0].get("colCnt") != "1"

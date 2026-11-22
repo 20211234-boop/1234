@@ -342,6 +342,7 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 | astryx | github.com/meta/astryx | MIT |
 | reverse-engineer-anything (REA) | github.com/morluto/rea | MIT |
 | hwp-reader (엔진은 syhwp) | 이 저장소에서 직접 작성 (syhwp: github.com/sysphere/syhwp, MIT) | — |
+| gongyong-hwpx (공무원 보고서 작성·편집) | github.com/Good-Intention/gongyong-hwpx | MIT |
 | image-to-code, limit-saver, infographic-kit | 이 저장소에서 직접 작성 (아이콘은 Lucide, ISC) | — |
 | ecc-* 명령어, planner·code-reviewer·build-error-resolver 에이전트 | github.com/affaan-m/everything-claude-code | MIT |
 
