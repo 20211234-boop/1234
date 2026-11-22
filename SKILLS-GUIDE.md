@@ -277,7 +277,6 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 
 | 이름 | 이유 |
 |---|---|
-| REA | 앱·바이너리 리버스 엔지니어링 — 업무와 무관 |
 | Career Ops | 구직자용 채용공고 스캐너 (채용 담당자용 아님) |
 | HyperFrames, OpenMontage | 영상 제작 파이프라인 |
 | gstack, GSD, BMAD Method, Matt Pocock Skills, Understand Anything | 개발자용 대형 프레임워크 — 컨텍스트 소모 큼 |
@@ -313,6 +312,16 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 
 ---
 
+## REA (`reverse-engineer-anything`, 리버스 엔지니어링)
+
+처음엔 "업무와 무관"으로 뺐다가, 나중에 공식판 1개만 들였다.
+
+- 하는 일: 소스 없는 앱(exe, Electron, 웹, APK)에서 기능이 어떻게 돌아가는지 근거와 함께 알아낸다
+- 말하는 법: "OO 앱의 검색이 어떻게 동작하는지 근거와 함께 알아내고, 비슷한 기능을 만들어줘"
+- 이 스킬은 **설명서일 뿐**이다. 실제 분석은 내 PC에서 `npx rea-agents setup`을 실행해야 된다 (Node.js 필요)
+- 공식은 `morluto/rea`뿐이다. `smartworldarafath/REA_Skill` 같은 이름이 비슷한 모음은 쓰지 않는다 (옛 버전 복사본 + "제한 없음"을 내건 제3자 스킬)
+- 내 것, 회사 것, 허락받은 프로그램에만 쓴다. AI 해석은 틀릴 수 있으니 결과를 검증한다
+
 ## 설치 위치와 출처
 
 | 스킬 | 출처 | 라이선스 |
@@ -331,6 +340,7 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 | agent-browser | github.com/vercel-labs/agent-browser | Apache-2.0 |
 | egm-* (7개) | github.com/google/elephant-goldfish-model | Apache-2.0 |
 | astryx | github.com/meta/astryx | MIT |
+| reverse-engineer-anything (REA) | github.com/morluto/rea | MIT |
 | image-to-code, limit-saver, infographic-kit | 이 저장소에서 직접 작성 (아이콘은 Lucide, ISC) | — |
 | ecc-* 명령어, planner·code-reviewer·build-error-resolver 에이전트 | github.com/affaan-m/everything-claude-code | MIT |
 

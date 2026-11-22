@@ -1,3 +1,0 @@
-interface:
-  display_name: "REA Binary Disassembly"
-  short_description: "Windows, Linux, and macOS binary decompilation & analysis"

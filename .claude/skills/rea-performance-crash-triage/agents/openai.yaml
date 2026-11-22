@@ -1,3 +1,0 @@
-interface:
-  display_name: "REA Crash & Performance Triage"
-  short_description: "Minidump forensics, Frida instrumentation & flamegraphs"
