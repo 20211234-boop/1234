@@ -341,6 +341,7 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 | egm-* (7개) | github.com/google/elephant-goldfish-model | Apache-2.0 |
 | astryx | github.com/meta/astryx | MIT |
 | reverse-engineer-anything (REA) | github.com/morluto/rea | MIT |
+| hwp-reader (엔진은 syhwp) | 이 저장소에서 직접 작성 (syhwp: github.com/sysphere/syhwp, MIT) | — |
 | image-to-code, limit-saver, infographic-kit | 이 저장소에서 직접 작성 (아이콘은 Lucide, ISC) | — |
 | ecc-* 명령어, planner·code-reviewer·build-error-resolver 에이전트 | github.com/affaan-m/everything-claude-code | MIT |
 
