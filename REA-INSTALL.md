@@ -1,6 +1,8 @@
-# REA 설치
+# REA 일괄 설치
 
-1. Node.js LTS 설치: [nodejs.org](https://nodejs.org) 또는 `winget install OpenJS.NodeJS.LTS`
-2. 터미널을 새로 열고 `node -v` 확인
-3. 빈 폴더에서 `npx rea-agents setup`
-4. Claude Code 선택 → 승인 → 재시작
+Node.js부터 REA 설정까지 한 번에 진행된다.
+
+- Windows: `powershell -ExecutionPolicy Bypass -File scripts\install-rea.ps1`
+- Mac: `bash scripts/install-rea.sh`
+
+끝나면 Claude Code를 재시작한다.
