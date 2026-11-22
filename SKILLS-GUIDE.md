@@ -189,6 +189,13 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 - 원본은 "모든 UI 작업"에 끼어들도록 되어 있어, "이름을 부르거나 React 웹앱을 만들 때만" 쓰도록 바꿨다.
 - 아직 베타. 보고서·PPT용이 아니라 웹 프로그램용이다.
 
+### REA — 리버스 엔지니어링 (`/reverse-engineer-anything`)
+
+소스 코드 없이 앱(데스크톱 프로그램, Electron·자바스크립트 앱, .NET, 웹사이트, 안드로이드 앱)을 뜯어보고 "이 기능이 어떻게 동작하는지"를 근거와 함께 설명한다.
+- **설치 필요:** 스킬은 작업 방법만 알려 준다. 실제 분석 도구(MCP 서버)는 내 컴퓨터에서 `npx rea-agents setup`을 실행해야 생긴다. 네이티브 프로그램을 깊게 분석하려면 Hopper·Ghidra·IDA 중 하나가 더 필요하다.
+- **동영상 분석은 안 된다.** 앱을 분석하는 도구이지 영상 파일 내용을 분석하는 도구가 아니다.
+- 회사 보안 정책·소프트웨어 이용약관이 허용하는 대상에만 쓴다. 남의 유료 프로그램을 뜯는 건 약관 위반이 될 수 있다.
+
 ### agent-browser
 
 이미 설치되어 있다 (디자인 팩). 쓰려면 `npm i -g agent-browser && agent-browser install`.
@@ -277,7 +284,6 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 
 | 이름 | 이유 |
 |---|---|
-| REA | 앱·바이너리 리버스 엔지니어링 — 업무와 무관 |
 | Career Ops | 구직자용 채용공고 스캐너 (채용 담당자용 아님) |
 | HyperFrames, OpenMontage | 영상 제작 파이프라인 |
 | gstack, GSD, BMAD Method, Matt Pocock Skills, Understand Anything | 개발자용 대형 프레임워크 — 컨텍스트 소모 큼 |
@@ -331,6 +337,7 @@ headroom wrap claude              # Claude Code를 Headroom 경유로 실행
 | agent-browser | github.com/vercel-labs/agent-browser | Apache-2.0 |
 | egm-* (7개) | github.com/google/elephant-goldfish-model | Apache-2.0 |
 | astryx | github.com/meta/astryx | MIT |
+| reverse-engineer-anything (REA) | github.com/morluto/rea | MIT |
 | image-to-code, limit-saver, infographic-kit | 이 저장소에서 직접 작성 (아이콘은 Lucide, ISC) | — |
 | ecc-* 명령어, planner·code-reviewer·build-error-resolver 에이전트 | github.com/affaan-m/everything-claude-code | MIT |
 

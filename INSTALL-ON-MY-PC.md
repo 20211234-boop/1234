@@ -1,13 +1,13 @@
 # 내 컴퓨터에 스킬 설치하기
 
-이 저장소에 모아 둔 스킬 27개와 명령어 4개를 회사 컴퓨터의 Claude Code와 코워크에 설치하는 방법이다.
+이 저장소에 모아 둔 스킬 28개와 명령어 4개를 회사 컴퓨터의 Claude Code와 코워크에 설치하는 방법이다.
 위에서부터 순서대로 하면 된다. 각 단계는 5분 안팎.
 
 ## 어디서 무엇이 되나
 
 | 기능 | 코워크 | Claude Code (내 컴퓨터) | 클라우드 세션 (웹) |
 |---|---|---|---|
-| 스킬 27개 | ✅ ZIP 업로드 | ✅ 폴더 복사 | ✅ 이 저장소에 이미 있음 |
+| 스킬 28개 | ✅ ZIP 업로드 | ✅ 폴더 복사 | ✅ 이 저장소에 이미 있음 |
 | ecc 명령어 4개 | ✅ 스킬로 바꾼 ZIP | ✅ `~/.claude/commands` | ✅ |
 | 에이전트 3개 (planner 등) | ❌ | ✅ `~/.claude/agents` | ✅ |
 | "스킬 자동 선택" 표 (CLAUDE.md) | ❌ (대신 각 스킬 설명으로 자동 선택) | ✅ | ✅ |
@@ -143,6 +143,16 @@ npm i -g agent-browser
 agent-browser install
 agent-browser --version   # 버전이 나오면 성공
 ```
+
+### REA (스킬 `/reverse-engineer-anything`가 쓰는 분석 도구)
+
+Node.js가 있어야 한다. 믿을 수 있는 폴더에서 실행한다.
+
+```bash
+npx rea-agents setup   # 쓰는 에이전트(Claude Code 등) 선택 → 설정 계획 확인 후 승인
+```
+
+끝나면 Claude Code를 다시 시작한다. 프로그램(.exe 등)을 깊게 분석하려면 Ghidra(무료) 같은 분석 엔진을 따로 설치한다. 웹·자바스크립트 앱 분석은 엔진 없이 된다. 회사 PC라면 IT 담당자 확인 후 설치한다.
 
 ### Headroom (토큰 압축 프록시)
 
